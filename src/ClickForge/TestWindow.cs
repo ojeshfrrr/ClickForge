@@ -1,0 +1,170 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Automation;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Threading;
+using ClickForge.Core;
+
+namespace ClickForge;
+public enum SafeTestMode { FixedCps, VariableTiming }
+
+public sealed class TestWindow : Window, ITargetGate
+{
+    private ClickEngine? fixedEngine;
+    private readonly VariableTimingSimulation simulation = new();
+    private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, Margin = new(0, 12, 0, 12) };
+    private readonly Border pad = new() { Height = 150, CornerRadius = new(7), Child = new TextBlock { Text = "Fixed-CPS mouse input target", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+    private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(150) };
+    internal readonly ComboBox ModeSelector = new() { Margin = new(0, 7, 0, 13) };
+    internal readonly TextBox MinimumInput = new() { Text = "5" };
+    internal readonly TextBox MaximumInput = new() { Text = "20" };
+    internal readonly TextBox SeedInput = new();
+    private readonly TextBlock configured = new() { TextWrapping = TextWrapping.Wrap, Margin = new(0, 10, 0, 0) };
+    private readonly TextBlock explanation = new() { TextWrapping = TextWrapping.Wrap, Margin = new(0, 0, 0, 13) };
+    private readonly TextBlock validation = new() { TextWrapping = TextWrapping.Wrap, Margin = new(0, 9, 0, 0) };
+    private readonly TextBox eventLog = new() { IsReadOnly = true, Height = 150, FontFamily = new("Consolas"), FontSize = 12, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly Button start = new() { Content = "Start test", Margin = new(0, 0, 7, 0) };
+    private readonly StackPanel rangePanel = new();
+    private nint handle;
+    private volatile bool pointerInside;
+    private DateTime end;
+    private int received;
+    private bool initialized, started;
+    internal SimulationSnapshot VariableSnapshot => simulation.Snapshot;
+    internal bool FixedTestEnabled => fixedEngine?.Enabled == true;
+    public bool CanClick => pointerInside && Native.GetForegroundWindow() == handle && !Native.IsIconic(handle);
+    private bool Variable => ModeSelector.SelectedIndex == (int)SafeTestMode.VariableTiming;
+
+    public TestWindow(SafeTestMode mode = SafeTestMode.FixedCps)
+    {
+        Title = "ClickForge · Safe Click Test"; Width = 610; Height = 740; MinWidth = 520; MinHeight = 560;
+        Height = Math.Min(Height, Math.Max(MinHeight, SystemParameters.WorkArea.Height - 50));
+        SetResourceReference(BackgroundProperty, "Base"); SetResourceReference(IconProperty, "ForgeIcon");
+        pad.SetResourceReference(Border.BackgroundProperty, "Elevated");
+        configured.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+        explanation.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        validation.SetResourceReference(TextBlock.ForegroundProperty, "Warning");
+        var panel = new StackPanel { Margin = new(22) };
+        panel.Children.Add(new TextBlock { Text = "Safe Click Test", FontSize = 23, FontWeight = FontWeights.SemiBold });
+        panel.Children.Add(new TextBlock { Text = "Test mode", Margin = new(0, 16, 0, 0) });
+        ModeSelector.Items.Add("Fixed CPS · controlled mouse target");
+        ModeSelector.Items.Add("Variable Timing — Safe Test Only");
+        AutomationProperties.SetName(ModeSelector, "Safe test timing mode");
+        panel.Children.Add(ModeSelector); panel.Children.Add(explanation);
+        var fields = new Grid();
+        for (int i = 0; i < 3; i++) fields.ColumnDefinitions.Add(new());
+        AddField(fields, 0, "Minimum CPS (5–20)", MinimumInput);
+        AddField(fields, 1, "Maximum CPS (5–20)", MaximumInput);
+        AddField(fields, 2, "Seed (optional integer)", SeedInput);
+        rangePanel.Children.Add(fields); rangePanel.Children.Add(configured);
+        panel.Children.Add(rangePanel); panel.Children.Add(validation); panel.Children.Add(status);
+        panel.Children.Add(pad); panel.Children.Add(eventLog);
+        var actions = new Grid { Margin = new(0, 14, 0, 0) };
+        actions.ColumnDefinitions.Add(new()); actions.ColumnDefinitions.Add(new());
+        start.SetResourceReference(StyleProperty, "PrimaryButton");
+        var stop = new Button { Content = "Stop test", Margin = new(7, 0, 0, 0) };
+        stop.SetResourceReference(StyleProperty, "EmergencyButton"); Grid.SetColumn(stop, 1);
+        actions.Children.Add(start); actions.Children.Add(stop); panel.Children.Add(actions);
+        panel.Children.Add(new TextBlock { Text = "Closing or leaving this window stops the test. The main emergency shortcut also stops it.", TextWrapping = TextWrapping.Wrap, Margin = new(0, 12, 0, 0), Foreground = (Brush)FindResource("Muted"), FontSize = 12 });
+        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        start.Click += (_, _) => StartTest(); stop.Click += (_, _) => StopTest();
+        pad.MouseEnter += (_, _) => pointerInside = true;
+        pad.MouseLeave += (_, _) => pointerInside = false;
+        pad.MouseLeftButtonDown += (_, e) => { received++; e.Handled = true; };
+        foreach (var input in new[] { MinimumInput, MaximumInput, SeedInput }) input.TextChanged += (_, _) => { if (initialized) ValidateInputs(); };
+        ModeSelector.SelectionChanged += (_, _) => { if (initialized) { StopTest(); started = false; UpdateMode(); } };
+        ModeSelector.SelectedIndex = (int)mode; initialized = true; UpdateMode();
+        SourceInitialized += (_, _) =>
+        {
+            handle = new WindowInteropHelper(this).Handle;
+            int dark = 1; Native.DwmSetWindowAttribute(handle, 20, ref dark, sizeof(int));
+        };
+        Deactivated += (_, _) => StopTest();
+        timer.Tick += (_, _) => RefreshStatus(); timer.Start();
+        Closed += (_, _) => { timer.Stop(); simulation.Dispose(); fixedEngine?.Dispose(); };
+    }
+    private static void AddField(Grid grid, int column, string label, TextBox input)
+    {
+        var field = new StackPanel { Margin = new(0, 0, column < 2 ? 10 : 0, 0) };
+        field.Children.Add(new TextBlock { Text = label, FontSize = 12, Margin = new(0, 0, 0, 7), TextWrapping = TextWrapping.Wrap });
+        AutomationProperties.SetName(input, label); field.Children.Add(input); Grid.SetColumn(field, column); grid.Children.Add(field);
+    }
+    private bool TryConfiguration(out VariableTimingRange? range, out int? seed, out string? error)
+    {
+        range = null; seed = null; error = null;
+        if (!int.TryParse(MinimumInput.Text, out int minimum) || !int.TryParse(MaximumInput.Text, out int maximum))
+        { error = "Enter whole-number rates from 5 to 20 CPS."; return false; }
+        try { range = new(minimum, maximum); }
+        catch (ArgumentException e) { error = e.Message.Split(Environment.NewLine)[0]; return false; }
+        if (!string.IsNullOrWhiteSpace(SeedInput.Text))
+        {
+            if (!int.TryParse(SeedInput.Text, out int parsed)) { error = "Seed must be a 32-bit integer or blank."; return false; }
+            seed = parsed;
+        }
+        return true;
+    }
+    private void ValidateInputs()
+    {
+        bool valid = TryConfiguration(out var range, out int? seed, out string? error);
+        validation.Text = error ?? ""; start.IsEnabled = !simulation.Snapshot.Running && (!Variable || valid);
+        configured.Text = valid ? $"Configured range: {range!.MinimumCps}–{range.MaximumCps} CPS · {range.ShortestIntervalMs:0.##}–{range.LongestIntervalMs:0.##} ms intervals\n{(seed.HasValue ? $"Repeatable interval sequence · seed {seed}" : "Fresh random interval sequence each run")}" : "Configured range is invalid.";
+    }
+    private void UpdateMode()
+    {
+        rangePanel.Visibility = Variable ? Visibility.Visible : Visibility.Collapsed;
+        eventLog.Visibility = Variable ? Visibility.Visible : Visibility.Collapsed;
+        pad.Visibility = Variable ? Visibility.Collapsed : Visibility.Visible;
+        explanation.Text = Variable ? "Logical simulation only. No mouse input is sent. Each run lasts up to 5 seconds. A seed repeats requested intervals; measured timing can vary." : "Existing fixed test: 2 seconds at 10 CPS. After starting, move the pointer inside the target. Mouse input is restricted to that target window.";
+        status.Text = Variable ? "Ready · logical events only" : "Ready · fixed 10 CPS target test";
+        ValidateInputs(); if (!Variable) { validation.Text = ""; start.IsEnabled = true; }
+    }
+    internal void StartTest()
+    {
+        if (Variable)
+        {
+            if (!TryConfiguration(out var range, out int? seed, out string? error)) { validation.Text = error; return; }
+            if (!simulation.Completion.IsCompleted) { validation.Text = "The previous simulation is stopping. Start again when it finishes."; return; }
+            _ = simulation.Start(range!, seed);
+            eventLog.Text = "#    elapsed ms   requested ms   measured ms";
+        }
+        else
+        {
+            fixedEngine ??= new(new MouseInputService(), this);
+            received = 0; end = DateTime.UtcNow.AddSeconds(2); fixedEngine.Start();
+        }
+        started = true; SetFieldsEnabled(false); start.IsEnabled = false; RefreshStatus();
+    }
+    internal void StopTest()
+    {
+        simulation.Stop(); fixedEngine?.Stop();
+        SetFieldsEnabled(true);
+        if (initialized) { ValidateInputs(); if (!Variable) start.IsEnabled = true; RefreshStatus(); }
+    }
+    private void SetFieldsEnabled(bool enabled)
+    {
+        MinimumInput.IsEnabled = enabled; MaximumInput.IsEnabled = enabled; SeedInput.IsEnabled = enabled;
+    }
+    private void RefreshStatus()
+    {
+        if (Variable)
+        {
+            var snapshot = simulation.Snapshot;
+            if (started)
+            {
+                var measured = snapshot.Measurement;
+                status.Text = $"{(snapshot.Error is not null ? "Error" : snapshot.Running ? "Simulating" : snapshot.Cancelled ? "Stopped" : "Completed")} · {measured.EventCount} logical events\nMeasured average: {measured.AverageCps:0.00} CPS · mean interval: {measured.MeanIntervalMs:0.00} ms\nMeasured elapsed: {measured.ElapsedMs / 1000:0.000} s";
+                eventLog.Text = "#    elapsed ms   requested ms   measured ms\n" + string.Join("\n", snapshot.Events.TakeLast(60).Select(e => $"{e.Number,3}  {e.ElapsedMs,10:0.00}  {e.RequestedIntervalMs,12:0.00}  {e.MeasuredIntervalMs,11:0.00}"));
+                if (snapshot.Error is not null) validation.Text = snapshot.Error;
+            }
+            if (!snapshot.Running) { SetFieldsEnabled(true); start.IsEnabled = simulation.Completion.IsCompleted && TryConfiguration(out _, out _, out _); }
+        }
+        else if (fixedEngine is not null)
+        {
+            if (DateTime.UtcNow >= end) fixedEngine.Stop();
+            status.Text = $"Configured: 10 CPS · {fixedEngine.Clicks} input pairs sent\nReceived: {received} button downs · {fixedEngine.State}";
+            if (!fixedEngine.Enabled) { SetFieldsEnabled(true); start.IsEnabled = true; }
+            if (fixedEngine.Error is not null) validation.Text = fixedEngine.Error;
+        }
+    }
+}

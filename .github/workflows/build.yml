@@ -1,0 +1,20 @@
+name: Build and core tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore WPF project
+        run: dotnet restore src/ClickForge/ClickForge.csproj
+      - name: Build Release
+        run: dotnet build src/ClickForge/ClickForge.csproj -c Release --no-restore
+      - name: Run core tests
+        run: dotnet run --project tests/ClickForge.Tests -c Release

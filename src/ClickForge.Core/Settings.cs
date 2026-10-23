@@ -1,0 +1,84 @@
+using System.Text.Json;
+
+namespace ClickForge.Core;
+
+public enum ActivationMode { Toggle, Hold }
+public sealed record Settings
+{
+    public int Cps { get; init; } = 10;
+    public ActivationMode Mode { get; init; }
+    public int ActivateKey { get; init; } = 0x75;
+    public int PauseKey { get; init; } = 0x76;
+    public int StopKey { get; init; } = 0x77;
+    public bool RobloxOnly { get; init; } = true;
+    public double Width { get; init; } = 880;
+    public double Height { get; init; } = 900;
+    public int LayoutVersion { get; init; }
+    public void Validate()
+    {
+        Speed.Validate(Cps);
+        if (!Enum.IsDefined(Mode)) throw new ArgumentException("Invalid activation mode.");
+        int[] keys = [ActivateKey, PauseKey, StopKey];
+        if (keys.Any(k => k < 0x70 || k > 0x7A)) throw new ArgumentException("Choose a function key from F1 to F11.");
+        if (keys.Distinct().Count() != 3) throw new ArgumentException("Each shortcut must use a different key.");
+        if (!double.IsFinite(Width) || !double.IsFinite(Height) || Width < 420 || Width > 1400 || Height < 600 || Height > 1600)
+            throw new ArgumentException("Invalid window size.");
+    }
+}
+public static class Speed
+{
+    public static void Validate(int cps) { if (cps is < 1 or > 50) throw new ArgumentOutOfRangeException(nameof(cps), "Use a whole number from 1 to 50 CPS."); }
+    public static double Interval(int cps) { Validate(cps); return 1000d / cps; }
+}
+public sealed class SettingsService(string path)
+{
+    public string? Warning { get; private set; }
+    public Settings Load()
+    {
+        try
+        {
+            if (!File.Exists(path)) return new();
+            var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path)) ?? throw new JsonException("Empty configuration.");
+            settings.Validate();
+            return settings;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        { Warning = "Settings could not be loaded. Defaults restored. " + e.Message; return new(); }
+    }
+    public void Save(Settings settings)
+    {
+        settings.Validate();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        string temporary = path + ".tmp";
+        try
+        {
+            File.WriteAllText(temporary, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
+            if (File.Exists(path)) File.Replace(temporary, path, null);
+            else File.Move(temporary, path);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+}
+
+public interface IHotkeyRegistrar { bool Register(int id, int key); void Unregister(int id); }
+public sealed class HotkeyBindings(IHotkeyRegistrar registrar) : IDisposable
+{
+    private readonly List<int> ids = [];
+    public void Apply(Settings settings)
+    {
+        settings.Validate();
+        Dispose();
+        int[] keys = [settings.ActivateKey, settings.PauseKey, settings.StopKey];
+        try
+        {
+            // Reserve the emergency key first. Partial registrations are always rolled back.
+            foreach (int i in new[] { 2, 0, 1 })
+            {
+                if (!registrar.Register(i + 1, keys[i])) throw new InvalidOperationException($"F{keys[i] - 0x6F} is unavailable. Another application may own it. Choose another key and apply shortcuts.");
+                ids.Add(i + 1);
+            }
+        }
+        catch { Dispose(); throw; }
+    }
+    public void Dispose() { foreach (int id in ids) registrar.Unregister(id); ids.Clear(); }
+}

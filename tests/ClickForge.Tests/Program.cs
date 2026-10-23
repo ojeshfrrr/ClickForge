@@ -1,0 +1,73 @@
+using System.Diagnostics;
+using ClickForge.Core;
+
+int passed = 0, failed = 0;
+void Test(string name, Action test)
+{
+    try { test(); passed++; Console.WriteLine("PASS " + name); }
+    catch (Exception e) { failed++; Console.WriteLine("FAIL " + name + ": " + e); }
+}
+void Check(bool condition, string message = "Assertion failed") { if (!condition) throw new Exception(message); }
+void Throws(Action action) { try { action(); } catch (ArgumentException) { return; } throw new Exception("Expected validation error"); }
+void Until(Func<bool> condition) { if (!SpinWait.SpinUntil(condition, 2000)) throw new Exception("Timed out"); }
+
+Test("Default and boundary CPS", () => { Check(new Settings().Cps == 10); Speed.Validate(1); Speed.Validate(50); });
+Test("Invalid CPS rejected", () => { Throws(() => Speed.Validate(0)); Throws(() => Speed.Validate(51)); Throws(() => Speed.Validate(-1)); });
+Test("Intervals", () => { Check(Speed.Interval(1) == 1000); Check(Speed.Interval(10) == 100); Check(Speed.Interval(50) == 20); });
+Test("Deterministic schedule, no catch-up bursts", () => { var s = new ClickSchedule(); s.Reset(0); for (int i = 0; i < 100; i++) { Check(s.Next == i * 100); s.Advance(i * 100, 10); } s.Advance(20000, 50); Check(s.Next == 20020); Check(s.WaitMilliseconds(20000) == 20); });
+Test("Start, duplicate start, stop and cancellation", () => { var m = new Mouse(); using var e = new ClickEngine(m, new Target()); for (int i = 0; i < 20; i++) e.Start(); Until(() => m.Count > 0); e.Stop(); int count = m.Count; Thread.Sleep(160); Check(m.Count == count && e.State == EngineState.Stopped); Check(m.MaximumConcurrency == 1); Check(m.Releases > 0); e.Stop(); });
+Test("Pause and resume", () => { var m = new Mouse(); using var e = new ClickEngine(m, new Target()); e.Start(); Until(() => m.Count > 0); e.TogglePause(); int count = m.Count; Thread.Sleep(150); Check(m.Count == count && e.IsPaused); e.TogglePause(); Until(() => m.Count > count); });
+Test("Live CPS change", () => { var m = new Mouse(); using var e = new ClickEngine(m, new Target()) { Cps = 1 }; e.Start(); Until(() => m.Count == 1); e.Cps = 50; Until(() => m.Count >= 5); Check(e.Enabled); });
+Test("Foreground loss and restoration", () => { var t = new Target { Allowed = false }; var m = new Mouse(); using var e = new ClickEngine(m, t); e.Start(); Thread.Sleep(100); Check(m.Count == 0 && e.State == EngineState.Paused); t.Allowed = true; Until(() => m.Count > 0); t.Allowed = false; Until(() => e.State == EngineState.Paused); int count = m.Count; Thread.Sleep(100); Check(m.Count == count); t.Allowed = true; Until(() => m.Count > count); });
+Test("Hold key loss stops and cannot auto-restart", () => { var m = new Mouse(); bool held = true; using var e = new ClickEngine(m, new Target()) { ActivationStillValid = () => Volatile.Read(ref held) }; e.Start(); Until(() => m.Count > 0); Volatile.Write(ref held, false); Until(() => !e.Enabled); int count = m.Count; held = true; Thread.Sleep(100); Check(m.Count == count); });
+Test("Dispose during clicking joins worker", () => { var m = new Mouse(); var e = new ClickEngine(m, new Target()); e.Start(); Until(() => m.Count > 0); e.Dispose(); int count = m.Count; Thread.Sleep(100); Check(m.Count == count && m.Releases > 0); e.Dispose(); });
+Test("Stop waits for in-flight pair and releases", () => { var m = new BlockingMouse(); using var e = new ClickEngine(m, new Target()); e.Start(); Check(m.Entered.Wait(2000)); var stop = Task.Run(e.Stop); Check(!stop.Wait(30)); m.Finish.Set(); Check(stop.Wait(2000)); Check(!m.Down); int count = m.Count; Thread.Sleep(100); Check(m.Count == count); });
+Test("Input failure becomes error and releases", () => { var m = new Mouse { Fail = true }; using var e = new ClickEngine(m, new Target()); e.Start(); Until(() => e.State == EngineState.Error); Check(!e.Enabled && m.Releases > 0 && e.Error!.Contains("Simulated")); });
+Test("Release failure surfaced", () => { var m = new Mouse { FailRelease = true }; using var e = new ClickEngine(m, new Target()); e.Start(); Until(() => m.Count > 0); e.Stop(); Check(e.State == EngineState.Error && !e.Enabled); });
+Test("Shutdown while paused", () => { var e = new ClickEngine(new Mouse(), new Target { Allowed = false }); e.Start(); e.Dispose(); Check(!e.Enabled); });
+Test("Missing, corrupt, invalid and atomic saved settings", () => { string dir = Path.Combine(Directory.GetCurrentDirectory(), "artifacts/ClickForge-tests-" + Guid.NewGuid()); Directory.CreateDirectory(dir); string path = Path.Combine(dir, "settings.json"); try { var store = new SettingsService(path); Check(store.Load() == new Settings()); File.WriteAllText(path, "bad JSON"); Check(store.Load().Cps == 10 && store.Warning != null); File.WriteAllText(path, "{\"Cps\":90}"); Check(store.Load().Cps == 10); var s = new Settings { Cps = 50, Mode = ActivationMode.Hold }; store.Save(s); Check(new SettingsService(path).Load() == s && !File.Exists(path + ".tmp")); } finally { Directory.Delete(dir, true); } });
+Test("Hotkey conflicts rejected before mutation", () => { var r = new Registrar(); using var b = new HotkeyBindings(r); b.Apply(new()); Throws(() => b.Apply(new Settings { PauseKey = 0x75 })); Check(r.Active.Count == 3); });
+Test("Failed hotkey registration rolls back", () => { var r = new Registrar { FailId = 2 }; using var b = new HotkeyBindings(r); bool failedRegistration = false; try { b.Apply(new()); } catch (InvalidOperationException) { failedRegistration = true; } Check(failedRegistration && r.Active.Count == 0); });
+Test("Hotkey replacement and cleanup", () => { var r = new Registrar(); using (var b = new HotkeyBindings(r)) { b.Apply(new()); b.Apply(new Settings { ActivateKey = 0x70 }); Check(r.Active.Count == 3); } Check(r.Active.Count == 0); });
+Test("Settings mode, key and size validation", () => { Throws(() => new Settings { Mode = (ActivationMode)99 }.Validate()); Throws(() => new Settings { ActivateKey = 0x7B }.Validate()); Throws(() => new Settings { Width = double.NaN }.Validate()); });
+Test("Repeated lifecycle stress", () => { var m = new Mouse(); using var e = new ClickEngine(m, new Target()); for (int i = 0; i < 100; i++) { e.Start(); e.Start(); e.TogglePause(); e.Stop(); } e.Start(); Until(() => m.Count > 0); e.Stop(); Check(m.MaximumConcurrency == 1); });
+Test("Measured scheduler rate at 10 and 50 CPS", () => { foreach (int cps in new[] { 10, 50 }) { var m = new Mouse(); using var e = new ClickEngine(m, new Target()) { Cps = cps }; var clock = Stopwatch.StartNew(); e.Start(); Thread.Sleep(2050); e.Stop(); double expected = cps * clock.Elapsed.TotalSeconds; Console.WriteLine($"  {cps} CPS: {m.Count} cycles / {clock.Elapsed.TotalSeconds:F3}s"); Check(Math.Abs(m.Count - expected) < expected * .22 + 1); } });
+Test("Variable range valid boundaries and equal endpoints", () => { var r = new VariableTimingRange(5, 20); Check(r.ShortestIntervalMs == 50 && r.LongestIntervalMs == 200); Check(new VariableTimingRange(12, 12).ShortestIntervalMs == 1000d / 12); });
+Test("Variable range rejects out-of-bounds and reversed values", () => { foreach (var pair in new[] { (4, 20), (5, 21), (21, 21), (-1, 10), (10, 5) }) Throws(() => new VariableTimingRange(pair.Item1, pair.Item2)); });
+Test("Variable requested intervals always remain in configured bounds", () => { var s = new VariableIntervalSequence(new(5, 20), 42); for (int i = 0; i < 10000; i++) { double interval = s.NextMilliseconds(); Check(interval >= 50 && interval <= 200); } });
+Test("Variable equal endpoints generate a constant interval", () => { var s = new VariableIntervalSequence(new(10, 10), 1); for (int i = 0; i < 100; i++) Check(s.NextMilliseconds() == 100); });
+Test("Explicit variable seed repeats the requested sequence", () => { var a = new VariableIntervalSequence(new(5, 20), -123); var b = new VariableIntervalSequence(new(5, 20), -123); var c = new VariableIntervalSequence(new(5, 20), 456); bool differs = false; for (int i = 0; i < 1000; i++) { double interval = a.NextMilliseconds(); Check(interval == b.NextMilliseconds()); differs |= interval != c.NextMilliseconds(); } Check(differs); });
+Test("Uniform-interval statistical throughput matches reciprocal mean", () => { var s = new VariableIntervalSequence(new(5, 20), 42); double sum = 0; for (int i = 0; i < 100000; i++) sum += s.NextMilliseconds(); Check(Math.Abs(sum / 100000 - 125) < 1); Check(Math.Abs(100000 * 1000d / sum - 8) < .1); });
+Test("Timing measurements distinguish measured elapsed and configured rate", () => { LogicalClickEvent[] events = [new(1, 50, 100, 100), new(2, 50, 100, 200), new(3, 50, 100, 300)]; var m = TimingMeasurement.Calculate(events, 400); Check(m.EventCount == 3 && m.AverageCps == 7.5 && m.MeanIntervalMs == 100); Check(TimingMeasurement.Calculate([], 0).AverageCps == 0); Throws(() => TimingMeasurement.Calculate(events, double.NaN)); Throws(() => TimingMeasurement.Calculate(events, -1)); });
+Test("Variable simulation completes with logical events and timing", () => { using var s = new VariableTimingSimulation(); var task = s.Start(new(20, 20), 42, TimeSpan.FromMilliseconds(230)); Check(task.Wait(2000)); var snapshot = s.Snapshot; Check(!snapshot.Running && !snapshot.Cancelled && snapshot.Error is null && snapshot.Events.Length >= 2); Check(snapshot.Events.All(e => e.RequestedIntervalMs == 50 && e.MeasuredIntervalMs >= e.RequestedIntervalMs)); Check(snapshot.Measurement.AverageCps == snapshot.Events.Length * 1000d / snapshot.Measurement.ElapsedMs); });
+Test("Variable stop cancels an interval promptly with no subsequent events", () => { using var s = new VariableTimingSimulation(); var task = s.Start(new(5, 5), 1); Until(() => s.Snapshot.Events.Length > 0); var watch = Stopwatch.StartNew(); s.Stop(); int count = s.Snapshot.Events.Length; Check(task.Wait(500)); Check(watch.ElapsedMilliseconds < 500); Thread.Sleep(220); Check(s.Snapshot.Events.Length == count && s.Snapshot.Cancelled); });
+Test("Variable external cancellation wakes pending wait", () => { using var s = new VariableTimingSimulation(); using var c = new CancellationTokenSource(); var task = s.Start(new(5, 5), 1, token: c.Token); c.Cancel(); Check(task.Wait(500)); Check(s.Snapshot.Cancelled && !s.Snapshot.Running); });
+Test("Variable pre-cancelled token produces no events", () => { using var s = new VariableTimingSimulation(); using var c = new CancellationTokenSource(); c.Cancel(); Check(s.Start(new(5, 20), 1, token: c.Token).Wait(1000)); Check(s.Snapshot.Events.Length == 0 && s.Snapshot.Cancelled); });
+Test("Variable duplicate workers rejected and completed run can restart", () => { using var s = new VariableTimingSimulation(); var first = s.Start(new(20, 20), 1); bool rejected = false; try { s.Start(new(20, 20)); } catch (InvalidOperationException) { rejected = true; } Check(rejected); s.Stop(); Check(first.Wait(1000)); var second = s.Start(new(20, 20), 1, TimeSpan.FromMilliseconds(120)); Check(second.Wait(1000)); Check(s.Snapshot.Events.Length > 0 && !s.Snapshot.Cancelled); });
+Test("Variable snapshot is isolated from external mutation", () => { using var s = new VariableTimingSimulation(); Check(s.Start(new(20, 20), 1, TimeSpan.FromMilliseconds(120)).Wait(1000)); var snapshot = s.Snapshot; snapshot.Events[0] = new(99, 0, 0, 0); Check(s.Snapshot.Events[0].Number == 1); });
+Test("Variable disposal stops and joins worker", () => { var s = new VariableTimingSimulation(); var task = s.Start(new(20, 20), 42); Until(() => s.Snapshot.Events.Length > 0); s.Dispose(); int count = s.Snapshot.Events.Length; Thread.Sleep(100); Check(task.IsCompleted && count == s.Snapshot.Events.Length && !s.Snapshot.Running); s.Dispose(); });
+Test("Variable bounded duration rejects invalid lengths", () => { using var s = new VariableTimingSimulation(); Throws(() => s.Start(new(5, 20), duration: TimeSpan.Zero)); Throws(() => s.Start(new(5, 20), duration: TimeSpan.FromMinutes(1))); });
+Test("Variable simulator has no live-engine or input dependencies", () => { var fields = typeof(VariableTimingSimulation).GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance); Check(!fields.Any(f => typeof(IMouseInput).IsAssignableFrom(f.FieldType) || f.FieldType == typeof(ClickEngine) || typeof(Delegate).IsAssignableFrom(f.FieldType))); var mouse = new Mouse(); using var live = new ClickEngine(mouse, new Target()); using var simulation = new VariableTimingSimulation(); Check(simulation.Start(new(20, 20), 42, TimeSpan.FromMilliseconds(150)).Wait(1000)); Check(simulation.Snapshot.Events.Length > 0 && !live.Enabled && mouse.Count == 0); });
+Console.WriteLine($"RESULT {passed} passed; {failed} failed");
+return failed == 0 ? 0 : 1;
+
+sealed class Target : ITargetGate { public volatile bool Allowed = true; public bool CanClick => Allowed; }
+sealed class Mouse : IMouseInput
+{
+    public int Count, Releases, MaximumConcurrency; private int concurrent;
+    public bool Fail, FailRelease;
+    public void Click() { int n = Interlocked.Increment(ref concurrent); MaximumConcurrency = Math.Max(MaximumConcurrency, n); try { if (Fail) throw new Exception("Simulated SendInput failure"); Interlocked.Increment(ref Count); } finally { Interlocked.Decrement(ref concurrent); } }
+    public void Release() { Interlocked.Increment(ref Releases); if (FailRelease) throw new Exception("Simulated release failure"); }
+}
+sealed class BlockingMouse : IMouseInput
+{
+    public readonly ManualResetEventSlim Entered = new(), Finish = new(); public volatile bool Down; public int Count;
+    public void Click() { Down = true; Entered.Set(); Finish.Wait(2000); Down = false; Count++; }
+    public void Release() => Down = false;
+}
+sealed class Registrar : IHotkeyRegistrar
+{
+    public readonly HashSet<int> Active = []; public int FailId;
+    public bool Register(int id, int key) { if (id == FailId) return false; return Active.Add(id); }
+    public void Unregister(int id) => Active.Remove(id);
+}
