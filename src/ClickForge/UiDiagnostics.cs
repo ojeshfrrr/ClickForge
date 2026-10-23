@@ -101,6 +101,7 @@ public partial class MainWindow
             Width = 880; Height = 900; await Task.Delay(100); UpdateLayout();
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-default.png"));
             var scroll = (ScrollViewer)Content;
+            results.Add($"DISPLAY requested {Width}x{Height}; actual {ActualWidth}x{ActualHeight}; viewport {scroll.ViewportWidth}x{scroll.ViewportHeight}; overflow {scroll.ScrollableHeight}; work area {SystemParameters.WorkArea}; DPI {VisualTreeHelper.GetDpi(this).DpiScaleX}");
             Check(scroll.ScrollableHeight == 0, "Default layout fits all controls without scrolling");
             CpsInput.Focus(); await Task.Delay(30);
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-focus.png"));
