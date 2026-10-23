@@ -42,7 +42,7 @@ public partial class MainWindow : Window
         if (selfTestPath is not null) store = new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selfTestPath))!, "ui-test-settings.json"));
         settings = store.Load();
         if (settings.LayoutVersion < 2) settings = settings with { Width = 880, Height = 900, LayoutVersion = 2 };
-        engine = selfTestPath is null ? new(new MouseInputService(), target) : new(new DiagnosticMouse(), new DiagnosticTarget());
+        engine = selfTestPath is null ? new(new MouseInputService(), target, desktopTarget) : new(new DiagnosticMouse(), new DiagnosticTarget());
         InitializeComponent();
         foreach (var combo in new[] { ActivateInput, PauseInput, StopInput }) for (int i = 1; i <= 11; i++) combo.Items.Add("F" + i);
         LoadControls();
@@ -90,7 +90,7 @@ public partial class MainWindow : Window
         PauseInput.SelectedIndex = settings.PauseKey - 0x70;
         StopInput.SelectedIndex = settings.StopKey - 0x70;
         engine.Cps = settings.Cps; target.Restricted = settings.RobloxOnly;
-        UpdateSpeedLabel(); ready = true;
+        UpdateSpeedLabel(); LoadTimingControls(); ready = true;
     }
     private void Persist()
     {
@@ -100,7 +100,7 @@ public partial class MainWindow : Window
     private void RegisterShortcuts()
     {
         engine.Stop(); shortcutsReady = false;
-        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = "Shortcuts ready. F1–F11 are supported."; }
+        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = "Shortcuts ready. F1â€“F11 are supported."; }
         catch (Exception e) { MessageText.Text = e.Message + " Clicking is disabled until shortcuts are available."; }
         StartKeyText.Text = $"F{settings.ActivateKey - 0x6F}";
         PauseKeyText.Text = $"F{settings.PauseKey - 0x6F}";
@@ -115,7 +115,7 @@ public partial class MainWindow : Window
             else if (shortcutsReady && (int)wParam == 1)
             {
                 if (settings.Mode == ActivationMode.Toggle) ToggleStart();
-                else { holdWindow = Native.GetForegroundWindow(); engine.Start(); }
+                else { holdWindow = Native.GetForegroundWindow(); StartValidated(); }
             }
             else if (shortcutsReady && (int)wParam == 2) engine.TogglePause();
             handled = true; UpdateStatus();
@@ -124,7 +124,7 @@ public partial class MainWindow : Window
         if (msg == 0x0218 || msg == 0x0011) { engine.Stop(); activeTest?.StopTest(); }
         return 0;
     }
-    private void ToggleStart() { if (activeTest?.IsVisible == true) return; if (engine.Enabled) engine.Stop(); else if (shortcutsReady && settings.Mode == ActivationMode.Toggle) engine.Start(); UpdateStatus(); }
+    private void ToggleStart() { if (activeTest?.IsVisible == true) return; if (engine.Enabled) engine.Stop(); else if (shortcutsReady && settings.Mode == ActivationMode.Toggle) StartValidated(); UpdateStatus(); }
     private void StartClicked(object sender, RoutedEventArgs e) => ToggleStart();
     private void PauseClicked(object sender, RoutedEventArgs e) { engine.TogglePause(); UpdateStatus(); }
     private void EmergencyClicked(object sender, RoutedEventArgs e) { engine.Stop(); activeTest?.StopTest(); UpdateStatus(); }
@@ -186,28 +186,29 @@ public partial class MainWindow : Window
         bool checking = target.IsChecking;
         if (!active || Environment.TickCount64 >= nextCounterUpdate) { displayedClicks = engine.Clicks; nextCounterUpdate = Environment.TickCount64 + 1000; }
         var display = (engine.State, active, engine.IsPaused, displayedClicks, settings.Cps, settings.Mode, settings.RobloxOnly, foreground, checking, shortcutsReady, settings.ActivateKey, settings.PauseKey, settings.StopKey);
-        if (lastDisplay == display) return;
+        if (lastDisplay == display) { RenderVariableStatus(); return; }
         lastDisplay = display;
         string text = engine.State switch { EngineState.Running => "Clicking", EngineState.Error => "Error", EngineState.Paused => "Paused", _ => "Stopped" };
         StatusText.Text = text;
         StatusDot.Fill = (Brush)FindResource(engine.State switch { EngineState.Running => "Success", EngineState.Error => "Failure", EngineState.Paused => "Warning", _ => "Muted" });
-        RobloxStatusText.Text = foreground ? "Roblox verified" : checking ? "Checking foreground…" : "No verified Roblox foreground";
+        RobloxStatusText.Text = foreground ? "Roblox verified" : checking ? "Checking foregroundâ€¦" : "No verified Roblox foreground";
         RobloxStatusText.Foreground = (Brush)FindResource(foreground ? "Success" : "Text");
-        TargetText.Text = !settings.RobloxOnly ? "Restriction off · any application" : foreground ? "Roblox is in focus" : "Waiting for Roblox to be in focus";
+        TargetText.Text = !settings.RobloxOnly ? "Restriction off Â· any application" : foreground ? "Roblox is in focus" : "Waiting for Roblox to be in focus";
         StateHintText.Text = engine.State == EngineState.Error ? "Input stopped safely" : engine.IsPaused ? "Paused by you" : active && engine.State != EngineState.Running ? "Waiting for target" : active ? "Sending input pairs" : "Ready to start";
         CycleText.Text = displayedClicks.ToString("N0"); ConfiguredCpsText.Text = settings.Cps.ToString();
         StartLabel.Text = active ? "Stop clicking" : settings.Mode == ActivationMode.Hold ? "Hold to click" : "Start clicking";
-        StartIcon.Text = active ? "■" : "▶";
+        StartIcon.Text = active ? "â– " : "â–¶";
         StartButton.IsEnabled = shortcutsReady && (settings.Mode == ActivationMode.Toggle || active);
         PauseLabel.Text = engine.IsPaused ? "Resume" : "Pause"; PauseButton.IsEnabled = active;
         PauseButton.ToolTip = active ? "Pause or resume the active request" : "Start clicking before using pause";
         StartButton.ToolTip = !shortcutsReady ? "Apply available, nonconflicting shortcuts to enable clicking" : settings.Mode == ActivationMode.Hold && !active ? $"Hold F{settings.ActivateKey - 0x6F} to activate. Release the key or change focus to stop." : "Start or stop the request. Roblox-only mode waits for a verified foreground client.";
         ModeHelp.Text = settings.Mode == ActivationMode.Hold ? $"Hold F{settings.ActivateKey - 0x6F} to click. Release or change focus to stop." : $"Press F{settings.ActivateKey - 0x6F} once to start, again to stop.";
+        RenderVariableStatus();
         if (engine.Error is { } error) MessageText.Text = error;
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
-        closing = true; refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
+        closing = true; refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
         if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 2 }; Persist(); }
     }
     private void LayoutChanged(object sender, SizeChangedEventArgs e)
