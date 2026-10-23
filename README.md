@@ -27,7 +27,7 @@ The existing **v1.0.0 needs one manual bootstrap download**, because that execut
 ## Features and controls
 
 - **Fixed speed:** 1–50 CPS, default 10; synchronized slider and validated numeric input. Live changes update the existing worker.
-- **Variable speed:** 1–50 CPS limits, default 5–20; explicitly selected non-Roblox desktop windows only.
+- **Variable speed:** 1–50 CPS limits, default 5–20; explicitly selected desktop windows, including verified Roblox clients.
 - **Toggle:** press the activation key once to start, again to stop.
 - **Hold:** click only while holding the activation key; key release or a foreground-window change ends activation.
 - **Roblox-only restriction:** enabled by default. Input requires a nonminimized, verified Roblox foreground client. Unverifiable targets fail closed.
@@ -46,13 +46,13 @@ The existing **v1.0.0 needs one manual bootstrap download**, because that execut
 
 The count records input pairs sent by Windows, not proof that a game accepted them. Windows scheduling does not guarantee exact timing.
 
-## Variable CPS for desktop applications
+## Variable CPS for Roblox and desktop applications
 
 Choose **Variable CPS** beside Click speed. Set minimum and maximum rates (whole numbers from 1 to 50, initially 5–20). Numeric inputs and sliders synchronize; crossing sliders moves the other endpoint to keep a valid range. Invalid typed limits stop input and must be corrected before activation. The dashboard shows the configured range, not a measured average.
 
-Click **Refresh windows**, then explicitly select an eligible desktop application. Roblox windows, Roblox executable metadata, and identities that cannot be read are excluded. Selection is session-local and is never restored from an old process/window identifier. Start is refused without an eligible selection or if Roblox/unverifiable software is in front. Input pauses unless the exact selected process/window is in front, nonminimized, alive, and under the pointer. A title containing Roblox also blocks input. Focus restoration can resume an active Toggle request; Hold additionally requires the original activation window and key to remain valid.
+Click **Refresh windows**, then explicitly select Roblox or another eligible desktop application. Starting with **1.1.2**, Roblox clients are included when they pass the same executable-name, publisher and Authenticode signature checks used by Fixed CPS. Unknown identities and unverified Roblox clients remain excluded. Selection is session-local and is never restored from an old process/window identifier. Start from ClickForge or the selected window. Input pauses unless the exact selected process/window is in front, nonminimized, alive, and under the pointer. Focus restoration can resume an active Toggle request; Hold additionally requires the original activation window and key to remain valid.
 
-The fixed-mode Roblox-only preference remains stored and unchanged. Variable mode always applies its desktop restriction regardless of that preference. Changing timing mode, range or selected target stops the request; explicitly activate again. The single existing worker, emergency stop, input error handling and shutdown cleanup serve both modes.
+The fixed-mode Roblox-only preference remains stored and unchanged. Variable mode always applies its selected-window restriction regardless of that preference. Changing timing mode, range or selected target stops the request; explicitly activate again. The single existing worker, emergency stop, input error handling and shutdown cleanup serve both modes.
 
 Each interval samples a rate uniformly between the configured limits, then uses `1000 / sampledCps` milliseconds. Equal limits give a constant interval. The first variable event waits one sampled interval; fixed mode retains its immediate first event. Scheduling delays can make measured intervals longer. For 5–20 CPS the theoretical long-run throughput is approximately 10.82 CPS, rather than the arithmetic midpoint. This is bounded random timing, with no human-mimicry model or guarantee of synthetic input acceptance.
 

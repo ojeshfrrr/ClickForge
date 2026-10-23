@@ -45,7 +45,7 @@ The application and helper are unsigned. Do not disable Windows security tools.
 
 F6: Toggle/hold activation. F7: Pause/resume. F8: Emergency stop.
 Clicking starts disabled. Roblox foreground restriction is on by default.
-Variable CPS requires an explicitly selected non-Roblox desktop window.
+Variable CPS requires an explicitly selected window; verified Roblox clients are supported.
 Variable Timing in Safe Click Test remains an isolated logical simulation.
 Some Roblox experiences prohibit autoclickers and may enforce account penalties.
 

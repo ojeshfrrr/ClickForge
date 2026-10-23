@@ -22,7 +22,7 @@ public partial class MainWindow
         FixedSpeedPanel.Visibility = variable ? Visibility.Collapsed : Visibility.Visible;
         VariableSpeedPanel.Visibility = variable ? Visibility.Visible : Visibility.Collapsed;
         RestrictInput.IsEnabled = !variable;
-        RestrictionHelp.Text = variable ? "Variable CPS always requires the selected non-Roblox desktop window. Your fixed-mode preference is preserved." : "Clicking pauses automatically when Roblox loses foreground focus.";
+        RestrictionHelp.Text = variable ? "Variable CPS always requires the selected window, including a verified Roblox client. Your fixed-mode preference is preserved." : "Clicking pauses automatically when Roblox loses foreground focus.";
         lastDisplay = null;
     }
     private void SynchronizeRange()
@@ -51,7 +51,7 @@ public partial class MainWindow
         engine.Stop(); settings = settings with { TimingMode = VariableTimingInput.IsChecked == true ? ClickTimingMode.Variable : ClickTimingMode.Fixed };
         engine.ConfigureTiming(settings.TimingMode, new(settings.MinimumCps, settings.MaximumCps));
         SynchronizeRange(); RenderTimingMode(); Persist(); UpdateStatus();
-        MessageText.Text = settings.TimingMode == ClickTimingMode.Variable ? "Variable CPS requires an explicitly selected non-Roblox desktop window. Refresh the window list to select one." : "Fixed CPS selected. Starts disabled.";
+        MessageText.Text = settings.TimingMode == ClickTimingMode.Variable ? "Variable CPS requires an explicitly selected window, including a verified Roblox client. Refresh the window list to select one." : "Fixed CPS selected. Starts disabled.";
     }
     private void VariableTyped(object sender, TextChangedEventArgs e)
     {
@@ -83,7 +83,7 @@ public partial class MainWindow
             var windows = await Task.Run(DesktopTargetService.Enumerate);
             if (closing) return;
             DesktopTargetInput.ItemsSource = windows;
-            VariableValidationText.Text = windows.Length == 0 ? "No eligible windows found. Open a desktop application and refresh." : "Select a window. Unknown identities and Roblox windows are excluded.";
+            VariableValidationText.Text = windows.Length == 0 ? "No eligible windows found. Open a desktop application and refresh." : "Select a window. Verified Roblox clients are supported; unknown identities remain excluded.";
         }
         catch (Exception ex) { VariableValidationText.Text = "Could not list windows: " + ex.Message; }
         finally { button.IsEnabled = true; }
@@ -111,6 +111,6 @@ public partial class MainWindow
         TargetText.Text = title.Length > 70 ? title[..67] + "…" : title;
         TargetText.ToolTip = title;
         ConfiguredCpsText.FontSize = 18; ConfiguredCpsText.Text = $"{settings.MinimumCps}–{settings.MaximumCps}";
-        StartButton.ToolTip = "Variable CPS requires an eligible selected desktop window. Roblox is excluded. Input pauses on focus loss or when the pointer leaves the target.";
+        StartButton.ToolTip = "Variable CPS requires an eligible selected desktop window. Verified Roblox clients are supported. Input pauses on focus loss or when the pointer leaves the target.";
     }
 }

@@ -89,11 +89,12 @@ public partial class MainWindow
             Check(settings.MinimumCps == 3 && settings.MaximumCps == 3 && MinimumCpsInput.Text == "3", "Crossing variable sliders keeps an ordered equal-endpoint range");
             MinimumCpsSlider.Value = 5; MaximumCpsSlider.Value = 20;
             Hotkey(1);
-            Check(!engine.Enabled && MessageText.Text.Contains("non-Roblox"), "Variable activation cannot fall back to fixed diagnostic target");
+            Check(!engine.Enabled && MessageText.Text.Contains("target window"), "Variable activation cannot fall back to fixed diagnostic target");
             Check(new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "ui-test-settings.json")).Load().TimingMode == ClickTimingMode.Variable, "Variable speed mode persists through actual UI controls");
             Width = 880; Height = 900; await Task.Delay(100); UpdateLayout();
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-variable-cps.png"));
             Check(((System.Windows.Media.SolidColorBrush)MinimumCpsInput.Foreground).Color == ((System.Windows.Media.SolidColorBrush)FindResource("Text")).Color, "Variable numeric input uses dark theme text contrast");
+            Check(!RobloxIdentity.IsVerified(Environment.ProcessPath!, System.Diagnostics.FileVersionInfo.GetVersionInfo(Environment.ProcessPath!)), "Roblox verification rejects the non-Roblox ClickForge executable");
             using (var noSelection = new DesktopTargetService())
                 Check(!noSelection.CanActivate && !noSelection.CanClick, "Native desktop gate fails closed without explicit selection");
             FixedTimingInput.IsChecked = true;
