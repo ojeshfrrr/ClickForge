@@ -84,7 +84,7 @@ public partial class MainWindow
             MinimumCpsInput.Text = "0";
             Check(VariableValidationText.Text.Contains("1 to 50") && !engine.Enabled, "Variable numeric bounds have accessible feedback");
             MinimumCpsInput.Text = "5"; MaximumCpsInput.Text = "25";
-            Check(settings.MaximumCps == 25 && MaximumCpsSlider.Value == 25 && ConfiguredCpsText.Text == "5â€“25", "Valid variable text synchronizes slider, persisted range and dashboard");
+            Check(settings.MaximumCps == 25 && MaximumCpsSlider.Value == 25 && ConfiguredCpsText.Text == "5–25", "Valid variable text synchronizes slider, persisted range and dashboard");
             MaximumCpsSlider.Value = 3;
             Check(settings.MinimumCps == 3 && settings.MaximumCps == 3 && MinimumCpsInput.Text == "3", "Crossing variable sliders keeps an ordered equal-endpoint range");
             MinimumCpsSlider.Value = 5; MaximumCpsSlider.Value = 20;
@@ -151,6 +151,19 @@ public partial class MainWindow
             }
             finally { activeTest.Close(); activeTest = null; ToggleModeInput.IsChecked = true; SafeTestModeInput.SelectedIndex = 0; }
             Check(!engine.Enabled, "UI checks finish stopped");
+            UpdatesClicked(this, new());
+            Check(updateWindow is { IsVisible: true } && VersionLabel.Text == "v" + InstalledVersion.Value.Split('+')[0], "Updates window opens with assembly-derived version");
+            var updatePanel = (StackPanel)((ScrollViewer)updateWindow!.Content).Content;
+            var autoCheck = updatePanel.Children.OfType<CheckBox>().Single();
+            autoCheck.IsChecked = true; Check(settings.CheckForUpdatesOnStartup && !engine.Enabled, "Startup update preference persists without activation");
+            autoCheck.IsChecked = false;
+            foreach (var state in Enum.GetValues<ClickForge.Core.Updates.UpdateState>())
+            {
+                updateClient.Report(state, "Diagnostic update status"); await Task.Delay(15);
+                Check(updateWindow.DisplayedStatus.Contains("Diagnostic update status"), "Updater displays " + state);
+            }
+            RenderDiagnostic(updateWindow, Path.Combine(Path.GetDirectoryName(output)!, "ui-updates.png"));
+            updateWindow.Close(); updateClient.Report(ClickForge.Core.Updates.UpdateState.Idle, "Check for a newer stable release.");
             Width = 880; Height = 900;
             await Task.Delay(1500); // Exclude resize, popup and software-render warmup.
             using var process = System.Diagnostics.Process.GetCurrentProcess();

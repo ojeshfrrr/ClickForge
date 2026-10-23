@@ -17,6 +17,7 @@ public sealed record Settings
     public double Width { get; init; } = 880;
     public double Height { get; init; } = 900;
     public int LayoutVersion { get; init; }
+    public bool CheckForUpdatesOnStartup { get; init; }
     public void Validate()
     {
         Speed.Validate(Cps);

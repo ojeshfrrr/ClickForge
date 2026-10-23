@@ -44,6 +44,7 @@ public partial class MainWindow : Window
         if (settings.LayoutVersion < 2) settings = settings with { Width = 880, Height = 900, LayoutVersion = 2 };
         engine = selfTestPath is null ? new(new MouseInputService(), target, desktopTarget) : new(new DiagnosticMouse(), new DiagnosticTarget());
         InitializeComponent();
+        InitializeUpdates();
         foreach (var combo in new[] { ActivateInput, PauseInput, StopInput }) for (int i = 1; i <= 11; i++) combo.Items.Add("F" + i);
         LoadControls();
         MessageText.Text = store.Warning ?? "Starts disabled. Clicks are sent at the current pointer.";
@@ -100,7 +101,7 @@ public partial class MainWindow : Window
     private void RegisterShortcuts()
     {
         engine.Stop(); shortcutsReady = false;
-        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = "Shortcuts ready. F1â€“F11 are supported."; }
+        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = "Shortcuts ready. F1–F11 are supported."; }
         catch (Exception e) { MessageText.Text = e.Message + " Clicking is disabled until shortcuts are available."; }
         StartKeyText.Text = $"F{settings.ActivateKey - 0x6F}";
         PauseKeyText.Text = $"F{settings.PauseKey - 0x6F}";
@@ -191,13 +192,13 @@ public partial class MainWindow : Window
         string text = engine.State switch { EngineState.Running => "Clicking", EngineState.Error => "Error", EngineState.Paused => "Paused", _ => "Stopped" };
         StatusText.Text = text;
         StatusDot.Fill = (Brush)FindResource(engine.State switch { EngineState.Running => "Success", EngineState.Error => "Failure", EngineState.Paused => "Warning", _ => "Muted" });
-        RobloxStatusText.Text = foreground ? "Roblox verified" : checking ? "Checking foregroundâ€¦" : "No verified Roblox foreground";
+        RobloxStatusText.Text = foreground ? "Roblox verified" : checking ? "Checking foreground…" : "No verified Roblox foreground";
         RobloxStatusText.Foreground = (Brush)FindResource(foreground ? "Success" : "Text");
-        TargetText.Text = !settings.RobloxOnly ? "Restriction off Â· any application" : foreground ? "Roblox is in focus" : "Waiting for Roblox to be in focus";
+        TargetText.Text = !settings.RobloxOnly ? "Restriction off · any application" : foreground ? "Roblox is in focus" : "Waiting for Roblox to be in focus";
         StateHintText.Text = engine.State == EngineState.Error ? "Input stopped safely" : engine.IsPaused ? "Paused by you" : active && engine.State != EngineState.Running ? "Waiting for target" : active ? "Sending input pairs" : "Ready to start";
         CycleText.Text = displayedClicks.ToString("N0"); ConfiguredCpsText.Text = settings.Cps.ToString();
         StartLabel.Text = active ? "Stop clicking" : settings.Mode == ActivationMode.Hold ? "Hold to click" : "Start clicking";
-        StartIcon.Text = active ? "â– " : "â–¶";
+        StartIcon.Text = active ? "■" : "▶";
         StartButton.IsEnabled = shortcutsReady && (settings.Mode == ActivationMode.Toggle || active);
         PauseLabel.Text = engine.IsPaused ? "Resume" : "Pause"; PauseButton.IsEnabled = active;
         PauseButton.ToolTip = active ? "Pause or resume the active request" : "Start clicking before using pause";
@@ -208,7 +209,7 @@ public partial class MainWindow : Window
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
-        closing = true; refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
+        closing = true; updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
         if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 2 }; Persist(); }
     }
     private void LayoutChanged(object sender, SizeChangedEventArgs e)
