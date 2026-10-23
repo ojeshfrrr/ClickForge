@@ -16,7 +16,7 @@ Open the [latest public release](https://github.com/ojeshfrrr/ClickForge/release
 
 Some Roblox experiences prohibit autoclickers. Using automated clicking may violate experience rules and carry account-enforcement risk. Check the rules before use. ClickForge is not Roblox-approved, undetectable or guaranteed to work in any particular experience.
 
-## In-app updates (1.1.0 and later)
+## In-app updates (1.1.1 and later)
 
 Open **Updates** in the header for the installed/latest version, release notes and a manual check. Optional startup checks default off. **Update now** downloads and verifies the stable Windows x64 package; **Install and restart** requires a separate confirmation. **Later** defers it. Download/check cancellation and friendly offline/rate-limit errors leave the app usable.
 

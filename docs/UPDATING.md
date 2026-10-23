@@ -2,7 +2,7 @@
 
 ## Versions and the first updater-enabled build
 
-`Version.props` is the single source of the application/helper version. The first updater-enabled version is **1.1.0**. Use `MAJOR.MINOR.PATCH`: patches for fixes, minor versions for compatible features, and major versions for breaking changes. Release tags must exactly match it, prefixed with `v`.
+`Version.props` is the single source of the application/helper version. The first updater-enabled version is **1.1.1**. Use `MAJOR.MINOR.PATCH`: patches for fixes, minor versions for compatible features, and major versions for breaking changes. Release tags must exactly match it, prefixed with `v`.
 
 The runtime reads `AssemblyInformationalVersion`; build metadata such as the source commit does not affect semantic precedence. Tags with a `v` prefix work. Prereleases/drafts are not update candidates, and equal or older versions are never installed.
 
@@ -17,11 +17,11 @@ The runtime reads `AssemblyInformationalVersion`; build metadata such as the sou
 
 ```powershell
 git push origin main
-git tag -a v1.1.0 -m "ClickForge v1.1.0"
-git push origin v1.1.0
+git tag -a v1.1.1 -m "ClickForge v1.1.1"
+git push origin v1.1.1
 ```
 
-For later releases, update the version and tag together, for example `1.1.1` / `v1.1.1`. Never move an existing published tag or replace its assets. If a workflow left an unpublished draft, inspect its failure and remove that incomplete draft explicitly before retrying; the workflow refuses to overwrite it.
+For later releases, update the version and tag together, for example `1.1.2` / `v1.1.2`. Never move an existing published tag or replace its assets. If a workflow left an unpublished draft, inspect its failure and remove that incomplete draft explicitly before retrying; the workflow refuses to overwrite it.
 
 A normal branch push runs build/tests. **It does not publish an application update.** Only a trusted `push` to a matching `v*` tag in `ojeshfrrr/ClickForge` can run the release job. Pull requests receive read-only permissions and cannot publish. Repository Actions settings and the GitHub token must permit the release job's `contents: write` permission.
 
