@@ -6,6 +6,9 @@ public enum ActivationMode { Toggle, Hold }
 public sealed record Settings
 {
     public int Cps { get; init; } = 10;
+    public ClickTimingMode TimingMode { get; init; }
+    public int MinimumCps { get; init; } = 5;
+    public int MaximumCps { get; init; } = 20;
     public ActivationMode Mode { get; init; }
     public int ActivateKey { get; init; } = 0x75;
     public int PauseKey { get; init; } = 0x76;
@@ -17,6 +20,8 @@ public sealed record Settings
     public void Validate()
     {
         Speed.Validate(Cps);
+        if (!Enum.IsDefined(TimingMode)) throw new ArgumentException("Invalid click speed mode.");
+        _ = new CpsRange(MinimumCps, MaximumCps);
         if (!Enum.IsDefined(Mode)) throw new ArgumentException("Invalid activation mode.");
         int[] keys = [ActivateKey, PauseKey, StopKey];
         if (keys.Any(k => k < 0x70 || k > 0x7A)) throw new ArgumentException("Choose a function key from F1 to F11.");

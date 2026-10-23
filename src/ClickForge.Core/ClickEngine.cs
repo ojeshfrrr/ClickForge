@@ -10,16 +10,21 @@ public sealed class ClickSchedule
     public double Next { get; private set; }
     public void Reset(double now) => Next = now;
     public void Advance(double now, int cps) { Next += Speed.Interval(cps); if (Next <= now) Next = now + Speed.Interval(cps); }
+    public void AdvanceInterval(double now, double interval) => Next = now + interval;
     public int WaitMilliseconds(double now) => (int)Math.Clamp(Math.Ceiling(Next - now), 0, 50);
 }
 
-public sealed class ClickEngine(IMouseInput input, ITargetGate target) : IDisposable
+public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariableTargetGate? variableTarget = null) : IDisposable
 {
     private readonly object gate = new();
     private readonly LoopWaiter wake = new();
     private Task? worker;
     private bool enabled, paused, disposed;
     private int cps = 10;
+    private ClickTimingMode timingMode;
+    private CpsRange range = new(5, 20);
+    private RateIntervalSequence sequence = new(new(5, 20));
+    private int revision;
     private EngineState state;
     private string? error;
     private long clicks;
@@ -29,6 +34,22 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target) : IDispos
     public bool Enabled { get { lock (gate) return enabled; } }
     public bool IsPaused { get { lock (gate) return paused; } }
     public long Clicks => Interlocked.Read(ref clicks);
+    public ClickTimingMode TimingMode { get { lock (gate) return timingMode; } }
+    public void ConfigureTiming(ClickTimingMode mode, CpsRange variableRange)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentException("Invalid click speed mode.");
+        variableRange.Validate();
+        lock (gate)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (timingMode == mode && range == variableRange) return;
+            // Configuration changes form a stop barrier. A fresh activation is explicit.
+            enabled = false; paused = false; ReleaseSafely();
+            if (state != EngineState.Error) state = EngineState.Stopped;
+            timingMode = mode; range = variableRange; sequence = new(variableRange); revision++;
+            wake.Set();
+        }
+    }
     public int Cps
     {
         get { lock (gate) return cps; }
@@ -40,6 +61,8 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target) : IDispos
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             if (enabled) return;
+            if (timingMode == ClickTimingMode.Variable && variableTarget?.CanActivate != true)
+                throw new InvalidOperationException("Select an eligible non-Roblox desktop window. Variable CPS cannot start while Roblox is in front.");
             enabled = true; paused = false; error = null;
             state = EngineState.Paused;
             worker ??= Task.Factory.StartNew(Loop, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -73,6 +96,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target) : IDispos
         var clock = Stopwatch.StartNew();
         var schedule = new ClickSchedule();
         int previousCps = cps;
+        int previousRevision = -1;
         bool wasActive = false;
         while (true)
         {
@@ -83,7 +107,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target) : IDispos
                 try
                 {
                     if (enabled && !ActivationStillValid()) { enabled = false; paused = false; state = EngineState.Stopped; ReleaseSafely(); }
-                    bool active = enabled && !paused && target.CanClick;
+                    bool active = enabled && !paused && (timingMode == ClickTimingMode.Variable ? variableTarget?.CanClick == true : target.CanClick);
                     if (!active)
                     {
                         if (wasActive) ReleaseSafely();
@@ -94,13 +118,19 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target) : IDispos
                     else
                     {
                         double now = clock.Elapsed.TotalMilliseconds;
-                        if (!wasActive || previousCps != cps) schedule.Reset(now);
+                        if (!wasActive || previousCps != cps || previousRevision != revision)
+                        {
+                            schedule.Reset(now);
+                            if (timingMode == ClickTimingMode.Variable) schedule.AdvanceInterval(now, sequence.NextMilliseconds());
+                        }
+                        previousRevision = revision;
                         wasActive = true; previousCps = cps; state = EngineState.Running;
                         if (schedule.WaitMilliseconds(now) == 0)
                         {
                             // Stop and pause share this lock: no new pair can begin after either returns.
                             input.Click(); Interlocked.Increment(ref clicks);
-                            schedule.Advance(clock.Elapsed.TotalMilliseconds, cps);
+                            if (timingMode == ClickTimingMode.Variable) schedule.AdvanceInterval(clock.Elapsed.TotalMilliseconds, sequence.NextMilliseconds());
+                            else schedule.Advance(clock.Elapsed.TotalMilliseconds, cps);
                         }
                         wait = schedule.WaitMilliseconds(clock.Elapsed.TotalMilliseconds);
                     }
