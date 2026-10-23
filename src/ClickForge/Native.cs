@@ -13,6 +13,14 @@ internal static class Native
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool UnregisterHotKey(nint window, int id);
     [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
+    internal delegate bool EnumWindowCallback(nint window, nint parameter);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool EnumWindows(EnumWindowCallback callback, nint parameter);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsWindowVisible(nint window);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowText(nint window, System.Text.StringBuilder text, int maximum);
+    [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X, Y; }
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")] internal static extern nint WindowFromPoint(Point point);
+    [DllImport("user32.dll")] internal static extern nint GetAncestor(nint window, uint flags);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint window, out uint process);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsIconic(nint window);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] internal struct TrustFile { public uint Size; [MarshalAs(UnmanagedType.LPWStr)] public string Path; public nint File, Subject; }
