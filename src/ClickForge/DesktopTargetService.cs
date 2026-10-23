@@ -4,7 +4,7 @@ using ClickForge.Core;
 
 namespace ClickForge;
 
-internal sealed record DesktopWindow(nint Handle, int ProcessId, long Started, string Path, string Title)
+internal sealed record DesktopWindow(nint Handle, int ProcessId, long Started, string Path, string Title, bool VerifiedRoblox = false)
 {
     public override string ToString() => $"{Title} · {System.IO.Path.GetFileNameWithoutExtension(Path)}";
 }
@@ -30,10 +30,11 @@ internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
             if (path is null) return null;
             var info = FileVersionInfo.GetVersionInfo(path);
             string title = Title(window);
-            if (string.IsNullOrWhiteSpace(title) || !DesktopTargetPolicy.IsEligible(path, info.CompanyName, info.ProductName, info.OriginalFilename, title)) return null;
-            return new(window, (int)pid, candidate.StartTime.ToUniversalTime().Ticks, path, title);
+            bool verifiedRoblox = DesktopTargetPolicy.RequiresRobloxVerification(path, info.CompanyName, info.ProductName, info.OriginalFilename, title) && RobloxIdentity.IsVerified(path, info);
+            if (string.IsNullOrWhiteSpace(title) || !DesktopTargetPolicy.IsEligible(path, info.CompanyName, info.ProductName, info.OriginalFilename, title, verifiedRoblox)) return null;
+            return new(window, (int)pid, candidate.StartTime.ToUniversalTime().Ticks, path, title, verifiedRoblox);
         }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or System.IO.IOException or UnauthorizedAccessException or NotSupportedException) { return null; }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or System.IO.IOException or UnauthorizedAccessException or NotSupportedException or System.Security.Cryptography.CryptographicException) { return null; }
     }
     public static DesktopWindow[] Enumerate()
     {
@@ -64,7 +65,7 @@ internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
     {
         if (selected is null || process is null || process.HasExited || !Native.IsWindowVisible(selected.Handle) || Native.IsIconic(selected.Handle)) return false;
         Native.GetWindowThreadProcessId(selected.Handle, out uint pid);
-        return pid == selected.ProcessId && !Title(selected.Handle).Contains("roblox", StringComparison.OrdinalIgnoreCase);
+        return pid == selected.ProcessId && (selected.VerifiedRoblox || !Title(selected.Handle).Contains("roblox", StringComparison.OrdinalIgnoreCase));
     }
     public bool CanActivate
     {
@@ -72,8 +73,15 @@ internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
         {
             lock (gate)
             {
-                // Unknown foreground identities fail closed, including protected processes.
-                try { return SelectionValid() && Inspect(Native.GetForegroundWindow(), false) is not null; }
+                // Start from ClickForge or the selected target only. Trust verification
+                // happens during selection, never on the click worker or hotkey path.
+                try
+                {
+                    if (!SelectionValid()) return false;
+                    nint foreground = Native.GetForegroundWindow();
+                    Native.GetWindowThreadProcessId(foreground, out uint pid);
+                    return foreground == selected!.Handle || pid == Environment.ProcessId;
+                }
                 catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { return false; }
             }
         }

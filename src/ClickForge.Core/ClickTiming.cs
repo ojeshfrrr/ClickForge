@@ -33,9 +33,10 @@ public interface IVariableTargetGate : ITargetGate
 public static class DesktopTargetPolicy
 {
     // Missing identity is never eligible. Check metadata as well as the executable name.
-    public static bool IsEligible(string? path, string? company, string? product, string? originalName, string? title)
+    public static bool RequiresRobloxVerification(params string?[] identity) => identity.Any(value => value?.Contains("roblox", StringComparison.OrdinalIgnoreCase) == true);
+    public static bool IsEligible(string? path, string? company, string? product, string? originalName, string? title, bool verifiedRoblox = false)
     {
         if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(company) || string.IsNullOrWhiteSpace(product)) return false;
-        return !new[] { path, company, product, originalName, title }.Any(value => value?.Contains("roblox", StringComparison.OrdinalIgnoreCase) == true);
+        return verifiedRoblox || !RequiresRobloxVerification(path, company, product, originalName, title);
     }
 }

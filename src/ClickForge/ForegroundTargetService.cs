@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography.X509Certificates;
 using ClickForge.Core;
 namespace ClickForge;
 
@@ -53,18 +52,7 @@ public sealed class ForegroundTargetService : ITargetGate, IDisposable
             _ = candidate.SafeHandle; // Retain process identity across possible PID reuse.
             string? path = candidate.MainModule?.FileName;
             if (path is null) return;
-            string name = System.IO.Path.GetFileName(path);
-            if (!name.Equals("RobloxPlayerBeta.exe", StringComparison.OrdinalIgnoreCase) &&
-                !name.Equals("Windows10Universal.exe", StringComparison.OrdinalIgnoreCase) &&
-                !name.Equals("RobloxPlayer.exe", StringComparison.OrdinalIgnoreCase)) return;
-            var version = FileVersionInfo.GetVersionInfo(path);
-            if (!(version.CompanyName?.Contains("Roblox", StringComparison.OrdinalIgnoreCase) ?? false)) return;
-            if (!Native.HasValidSignature(path)) return;
-            // X509CertificateLoader cannot extract Authenticode certificates from PE containers.
-#pragma warning disable SYSLIB0057
-            using var certificate = X509Certificate.CreateFromSignedFile(path);
-#pragma warning restore SYSLIB0057
-            if (!certificate.Subject.Contains("Roblox", StringComparison.OrdinalIgnoreCase)) return;
+            if (!RobloxIdentity.IsVerified(path, FileVersionInfo.GetVersionInfo(path))) return;
             lock (gate)
             {
                 if (disposed || window != cachedWindow || pid != cachedPid) return;

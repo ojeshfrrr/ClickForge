@@ -62,7 +62,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
             ObjectDisposedException.ThrowIf(disposed, this);
             if (enabled) return;
             if (timingMode == ClickTimingMode.Variable && variableTarget?.CanActivate != true)
-                throw new InvalidOperationException("Select an eligible non-Roblox desktop window. Variable CPS cannot start while Roblox is in front.");
+                throw new InvalidOperationException("Select an eligible target window, then activate from ClickForge or that window. Roblox must be a verified client.");
             enabled = true; paused = false; error = null;
             state = EngineState.Paused;
             worker ??= Task.Factory.StartNew(Loop, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
