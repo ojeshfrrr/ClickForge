@@ -16,5 +16,6 @@ foreach ($tests in @('tests/ClickForge.Tests','tests/ClickForge.UpdateTests')) {
 }
 $uiProcess = Start-Process -FilePath (Join-Path $PSScriptRoot 'artifacts/ui-build/ClickForge.exe') -ArgumentList '--ui-self-test', ('"' + (Join-Path $PSScriptRoot 'artifacts/logs/ui-tests.txt') + '"') -WindowStyle Hidden -PassThru
 if (-not $uiProcess.WaitForExit(40000)) { throw 'UI checks timed out' }
+Get-Content -LiteralPath artifacts/logs/ui-tests.txt | Write-Output
 if ($uiProcess.ExitCode) { throw 'UI checks failed; see artifacts/logs/ui-tests.txt' }
 if (-not $SkipPackage) { & ./scripts/Package-Release.ps1 }
