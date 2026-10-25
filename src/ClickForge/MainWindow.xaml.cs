@@ -25,7 +25,8 @@ public partial class MainWindow : Window
     private long displayedClicks, nextCounterUpdate;
     private (EngineState, bool, bool, long, int, ActivationMode, bool, bool, bool, bool, int, int, int)? lastDisplay;
     private readonly string? previewPath = GetPreviewPath();
-    private readonly string? selfTestPath = GetArgument("--ui-self-test");
+    private readonly string? selfTestPath = GetArgument("--ui-self-test") ?? GetArgument("--ui-interactive-test");
+    private readonly bool interactiveTest = GetArgument("--ui-interactive-test") is not null;
     private static string? GetArgument(string name)
     {
         string[] args = Environment.GetCommandLineArgs(); int i = Array.IndexOf(args, name);
@@ -40,24 +41,28 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         if (selfTestPath is not null) store = new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selfTestPath))!, "ui-test-settings.json"));
+        else if (previewPath is not null) store = new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(previewPath))!, "preview-settings.json"));
         settings = store.Load();
-        if (settings.LayoutVersion < 2) settings = settings with { Width = 880, Height = 900, LayoutVersion = 2 };
+        if (settings.LayoutVersion < 3) settings = settings with { Width = 1280, Height = 920, LayoutVersion = 3 };
         engine = selfTestPath is null ? new(new MouseInputService(), target, desktopTarget) : new(new DiagnosticMouse(), new DiagnosticTarget());
         InitializeComponent();
         InitializeUpdates();
         foreach (var combo in new[] { ActivateInput, PauseInput, StopInput }) for (int i = 1; i <= 11; i++) combo.Items.Add("F" + i);
         LoadControls();
         MessageText.Text = store.Warning ?? "Starts disabled. Clicks are sent at the current pointer.";
+        InitializeDaily();
         ready = true;
         SourceInitialized += (_, _) =>
         {
             int dark = 1;
             Native.DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
-            if (previewPath is not null || selfTestPath is not null) { shortcutsReady = true; return; }
+            if (previewPath is not null || (selfTestPath is not null && !interactiveTest)) { shortcutsReady = true; return; }
             source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             source.AddHook(WindowMessage);
             bindings = new(new GlobalHotkeyService(source.Handle));
-            RegisterShortcuts();
+            RegisterShortcuts(); InitializeTray();
+            if (shortcutsReady && store.Warning is not null) MessageText.Text = store.Warning;
+            else if (shortcutsReady && profiles.Warnings.Count > 0) MessageText.Text = string.Join(" ", profiles.Warnings.Distinct());
         };
         engine.ActivationStillValid = () => settings.Mode != ActivationMode.Hold ||
             ((Native.GetAsyncKeyState(settings.ActivateKey) & 0x8000) != 0 && Native.GetForegroundWindow() == holdWindow);
@@ -65,6 +70,8 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         ContentRendered += (_, _) =>
         {
+            if (interactiveTest) { Title = "ClickForge · UI verification (mock input)"; MessageText.Text = "UI verification: input is mocked and configuration is disposable."; return; }
+            if (selfTestPath is not null) File.AppendAllText(selfTestPath, "WPF content rendered" + Environment.NewLine);
             if (selfTestPath is not null) { _ = RunUiSelfTestAsync(selfTestPath); return; }
             if (previewPath is null) return;
             UpdateStatus();
@@ -93,10 +100,10 @@ public partial class MainWindow : Window
         engine.Cps = settings.Cps; target.Restricted = settings.RobloxOnly;
         UpdateSpeedLabel(); LoadTimingControls(); ready = true;
     }
-    private void Persist()
+    private bool Persist()
     {
-        try { store.Save(settings); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { MessageText.Text = "Could not save preferences: " + e.Message; }
+        try { store.Save(settings); persistenceFailed = false; UpdateProfileLabel(); return true; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { persistenceFailed = true; history.Add(ActivityKind.PersistenceError); MessageText.Text = "Could not save preferences. Check access to your ClickForge user data folder."; return false; }
     }
     private void RegisterShortcuts()
     {
@@ -111,24 +118,24 @@ public partial class MainWindow : Window
     {
         if (msg == 0x0312)
         {
-            if ((int)wParam == 3) { engine.Stop(); activeTest?.StopTest(); }
+            if ((int)wParam == 3) { EmergencyClicked(this, new()); }
             else if (activeTest?.IsVisible == true) { handled = true; return 0; }
             else if (shortcutsReady && (int)wParam == 1)
             {
                 if (settings.Mode == ActivationMode.Toggle) ToggleStart();
                 else { holdWindow = Native.GetForegroundWindow(); StartValidated(); }
             }
-            else if (shortcutsReady && (int)wParam == 2) engine.TogglePause();
+            else if (shortcutsReady && (int)wParam == 2) PauseClicked(this, new());
             handled = true; UpdateStatus();
         }
         // Session locking/suspend cannot preserve an active request.
         if (msg == 0x0218 || msg == 0x0011) { engine.Stop(); activeTest?.StopTest(); }
         return 0;
     }
-    private void ToggleStart() { if (activeTest?.IsVisible == true) return; if (engine.Enabled) engine.Stop(); else if (shortcutsReady && settings.Mode == ActivationMode.Toggle) StartValidated(); UpdateStatus(); }
+    private void ToggleStart() { if (activeTest?.IsVisible == true) return; if (engine.Enabled) { engine.Stop(); history.Add(ActivityKind.Stopped); } else if (shortcutsReady && settings.Mode == ActivationMode.Toggle) StartValidated(); UpdateStatus(); }
     private void StartClicked(object sender, RoutedEventArgs e) => ToggleStart();
-    private void PauseClicked(object sender, RoutedEventArgs e) { engine.TogglePause(); UpdateStatus(); }
-    private void EmergencyClicked(object sender, RoutedEventArgs e) { engine.Stop(); activeTest?.StopTest(); UpdateStatus(); }
+    private void PauseClicked(object sender, RoutedEventArgs e) { engine.TogglePause(); if (engine.Enabled) history.Add(engine.IsPaused ? ActivityKind.Paused : ActivityKind.Started); UpdateStatus(); }
+    private void EmergencyClicked(object sender, RoutedEventArgs e) { engine.Stop(); activeTest?.StopTest(); history.Add(ActivityKind.EmergencyStop); UpdateStatus(); }
     private void SpeedChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!ready) return;
@@ -171,7 +178,7 @@ public partial class MainWindow : Window
         catch (ArgumentException ex) { MessageText.Text = ex.Message; return; }
         settings = candidate; RegisterShortcuts(); if (shortcutsReady) Persist(); UpdateStatus();
     }
-    private void ResetClicked(object sender, RoutedEventArgs e) { engine.Stop(); settings = new(); LoadControls(); RegisterShortcuts(); Persist(); UpdateStatus(); }
+    private void ResetClicked(object sender, RoutedEventArgs e) { engine.Stop(); settings = settings with { ActivateKey = 0x75, PauseKey = 0x76, StopKey = 0x77 }; LoadControls(); RegisterShortcuts(); Persist(); UpdateStatus(); }
     private void TestClicked(object sender, RoutedEventArgs e)
     {
         engine.Stop();
@@ -187,7 +194,7 @@ public partial class MainWindow : Window
         bool checking = target.IsChecking;
         if (!active || Environment.TickCount64 >= nextCounterUpdate) { displayedClicks = engine.Clicks; nextCounterUpdate = Environment.TickCount64 + 1000; }
         var display = (engine.State, active, engine.IsPaused, displayedClicks, settings.Cps, settings.Mode, settings.RobloxOnly, foreground, checking, shortcutsReady, settings.ActivateKey, settings.PauseKey, settings.StopKey);
-        if (lastDisplay == display) { RenderVariableStatus(); return; }
+        if (lastDisplay == display) { RenderVariableStatus(); UpdateDailyStatus(); return; }
         lastDisplay = display;
         string text = engine.State switch { EngineState.Running => "Clicking", EngineState.Error => "Error", EngineState.Paused => "Paused", _ => "Stopped" };
         StatusText.Text = text;
@@ -204,18 +211,22 @@ public partial class MainWindow : Window
         PauseButton.ToolTip = active ? "Pause or resume the active request" : "Start clicking before using pause";
         StartButton.ToolTip = !shortcutsReady ? "Apply available, nonconflicting shortcuts to enable clicking" : settings.Mode == ActivationMode.Hold && !active ? $"Hold F{settings.ActivateKey - 0x6F} to activate. Release the key or change focus to stop." : "Start or stop the request. Roblox-only mode waits for a verified foreground client.";
         ModeHelp.Text = settings.Mode == ActivationMode.Hold ? $"Hold F{settings.ActivateKey - 0x6F} to click. Release or change focus to stop." : $"Press F{settings.ActivateKey - 0x6F} once to start, again to stop.";
-        RenderVariableStatus();
+        RenderVariableStatus(); UpdateDailyStatus();
         if (engine.Error is { } error) MessageText.Text = error;
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
-        closing = true; updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
-        if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 2 }; Persist(); }
+        if (selfTestPath is not null) File.AppendAllText(selfTestPath, "WPF closing" + Environment.NewLine);
+        if (closing) return;
+        if (!exitRequested && previewPath is null && settings.CloseToTray && CanHideToTray) { e.Cancel = true; HideToTray(); return; }
+        closing = true; targetWindow?.Close(); tray?.Dispose(); tray = null; profilesWindow?.Close(); preferencesWindow?.Close(); updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
+        if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 3 }; Persist(); }
     }
     private void LayoutChanged(object sender, SizeChangedEventArgs e)
     {
         if (OptionsGrid is null) return;
-        bool narrow = ActualWidth < 720;
+        LayoutShell();
+        bool narrow = DashboardScroll.ActualWidth < 680;
         OptionsGrid.ColumnDefinitions[1].Width = narrow ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         Grid.SetColumn(RestrictionPanel, narrow ? 0 : 1); Grid.SetRow(RestrictionPanel, narrow ? 1 : 0);
         ModePanel.Margin = narrow ? new Thickness(0, 0, 0, 10) : new Thickness(0, 0, 6, 0);

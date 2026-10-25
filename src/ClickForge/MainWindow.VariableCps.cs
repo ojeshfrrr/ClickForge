@@ -97,9 +97,10 @@ public partial class MainWindow
     }
     private void StartValidated()
     {
+        if (profilesWindow?.IsVisible == true || preferencesWindow?.IsVisible == true || targetWindow?.IsVisible == true) { engine.Stop(); MessageText.Text = "Close Profiles, Settings and Target before activating clicking."; return; }
         if (settings.TimingMode == ClickTimingMode.Variable && !TryRange(out _)) { engine.Stop(); MessageText.Text = VariableValidationText.Text; return; }
-        try { engine.Start(); }
-        catch (InvalidOperationException ex) { MessageText.Text = ex.Message; VariableValidationText.Text = ex.Message; }
+        try { engine.Start(); history.Add(ActivityKind.Started); }
+        catch (InvalidOperationException ex) { MessageText.Text = ex.Message; VariableValidationText.Text = ex.Message; history.Add(ActivityKind.Waiting); }
     }
     private void RenderVariableStatus()
     {

@@ -34,7 +34,8 @@ public partial class MainWindow
         _ = Dispatcher.BeginInvoke(new Action(() =>
         {
             if (closing) return;
-            if (status.State == UpdateState.Available) MessageText.Text = status.Message + " Open Updates to review it.";
+            if (status.State == UpdateState.Available) { MessageText.Text = status.Message + " Open Updates to review it."; history.Add(ClickForge.Core.ActivityKind.UpdateAvailable); if (hiddenToTray) tray?.Notify("A stable update is available. Open Updates to review it."); }
+            if (status.State == UpdateState.Failed) history.Add(ClickForge.Core.ActivityKind.UpdateFailure);
         }));
     }
     private void UpdatesClicked(object sender, RoutedEventArgs e)
@@ -75,7 +76,7 @@ public partial class MainWindow
                 if (json.RootElement.GetProperty("Nonce").GetString() == request.Nonce && json.RootElement.GetProperty("Ready").GetBoolean())
                 {
                     updateClient.Report(UpdateState.Restarting, "Updater ready. Closing ClickForge cleanly; installation will continue after exit.");
-                    Application.Current.Shutdown(); return;
+                    PrepareExit(); Application.Current.Shutdown(); return;
                 }
             }
             if (process.HasExited) throw new IOException(File.Exists(Path.Combine(workspace, "result.json")) ? UpdateFiles.ReadJson<InstallReceipt>(Path.Combine(workspace, "result.json")).Message : "The update helper could not initialize. No installed files changed.");

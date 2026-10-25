@@ -70,7 +70,7 @@ public partial class MainWindow
             // can keep owning its shortcuts during UI diagnostics.
             bindings = new(new DiagnosticRegistrar());
             ResetClicked(this, new());
-            Check(settings.Cps == 10 && settings.Mode == ActivationMode.Toggle && settings.RobloxOnly && !engine.Enabled, "Reset defaults updates controls safely");
+            Check(settings.Cps == 50 && settings.Mode == ActivationMode.Toggle && settings.RobloxOnly && settings.ActivateKey == 0x75 && !engine.Enabled, "Reset shortcuts preserves timing and target preferences while stopping input");
             CpsInput.Text = "23"; ApplyClicked(this, new());
             Check(new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "ui-test-settings.json")).Load().Cps == 23, "Preferences persist through real UI actions");
             CpsInput.Text = "10"; UpdateStatus();
@@ -91,7 +91,7 @@ public partial class MainWindow
             Hotkey(1);
             Check(!engine.Enabled && MessageText.Text.Contains("target window"), "Variable activation cannot fall back to fixed diagnostic target");
             Check(new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "ui-test-settings.json")).Load().TimingMode == ClickTimingMode.Variable, "Variable speed mode persists through actual UI controls");
-            Width = 880; Height = 900; await Task.Delay(100); UpdateLayout();
+            Width = 1280; Height = 920; await Task.Delay(100); UpdateLayout();
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-variable-cps.png"));
             Check(((System.Windows.Media.SolidColorBrush)MinimumCpsInput.Foreground).Color == ((System.Windows.Media.SolidColorBrush)FindResource("Text")).Color, "Variable numeric input uses dark theme text contrast");
             Check(!RobloxIdentity.IsVerified(Environment.ProcessPath!, System.Diagnostics.FileVersionInfo.GetVersionInfo(Environment.ProcessPath!)), "Roblox verification rejects the non-Roblox ClickForge executable");
@@ -99,11 +99,11 @@ public partial class MainWindow
                 Check(!noSelection.CanActivate && !noSelection.CanClick, "Native desktop gate fails closed without explicit selection");
             FixedTimingInput.IsChecked = true;
             Check(RestrictInput.IsEnabled && settings.RobloxOnly && engine.TimingMode == ClickTimingMode.Fixed && !engine.Enabled, "Returning to fixed mode restores original restrictions without activation");
-            Width = 880; Height = 900; await Task.Delay(100); UpdateLayout();
+            Width = 1280; Height = 920; await Task.Delay(100); UpdateLayout();
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-default.png"));
-            var scroll = (ScrollViewer)Content;
+            var scroll = DashboardScroll;
             results.Add($"DISPLAY requested {Width}x{Height}; actual {ActualWidth}x{ActualHeight}; viewport {scroll.ViewportWidth}x{scroll.ViewportHeight}; overflow {scroll.ScrollableHeight}; work area {SystemParameters.WorkArea}; DPI {VisualTreeHelper.GetDpi(this).DpiScaleX}");
-            if (ActualHeight >= 899)
+            if (ActualHeight >= 919)
                 Check(scroll.ScrollableHeight == 0, "Default layout fits all controls without scrolling");
             else
             {
@@ -112,11 +112,12 @@ public partial class MainWindow
             }
             CpsInput.Focus(); await Task.Delay(30);
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-focus.png"));
+            ShortcutsExpander.IsExpanded = true; UpdateLayout();
             ActivateInput.IsDropDownOpen = true; await Task.Delay(70); ActivateInput.ApplyTemplate();
             var popup = (System.Windows.Controls.Primitives.Popup)ActivateInput.Template.FindName("PART_Popup", ActivateInput);
             Check(popup.IsOpen && popup.Child is FrameworkElement, "Dark shortcut popup opens");
             RenderDiagnostic((FrameworkElement)popup.Child!, Path.Combine(Path.GetDirectoryName(output)!, "ui-dropdown.png"));
-            ActivateInput.IsDropDownOpen = false;
+            ActivateInput.IsDropDownOpen = false; ShortcutsExpander.IsExpanded = false;
             Width = 640; Height = 700; await Task.Delay(100); UpdateLayout();
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-small.png"));
             Check(Grid.GetRow(RestrictionPanel) == 1 && scroll.ScrollableHeight > 0, "Narrow layout stacks options and scrolls intentionally");
@@ -172,7 +173,9 @@ public partial class MainWindow
             }
             RenderDiagnostic(updateWindow, Path.Combine(Path.GetDirectoryName(output)!, "ui-updates.png"));
             updateWindow.Close(); updateClient.Report(ClickForge.Core.Updates.UpdateState.Idle, "Check for a newer stable release.");
-            Width = 880; Height = 900;
+            Width = 1280; Height = 920;
+            await RunDailyDiagnosticsAsync(results, output);
+            Width = 1280; Height = 920;
             await Task.Delay(1500); // Exclude resize, popup and software-render warmup.
             using var process = System.Diagnostics.Process.GetCurrentProcess();
             async Task Measure(string label)
@@ -191,6 +194,12 @@ public partial class MainWindow
         {
             engine.Stop();
             results.Add("NOTE Mouse input mocked. Routed shortcut tests do not prove physical global-key delivery.");
+            if (exit == 0) { engine.Start(); results.Add("PASS Exit requested while the mock click worker is active"); }
+            PrepareExit();
+            ExecuteTrayCommand(TrayCommand.Exit); ExecuteTrayCommand(TrayCommand.Exit);
+            if (closing && !engine.Enabled && tray is null) results.Add("PASS Explicit and repeated Exit complete shared engine, hotkey and tray cleanup");
+            else { results.Add("FAIL Exit cleanup incomplete"); exit = 1; }
+            results.Add(exit == 0 ? "RESULT UI checks completed successfully" : "RESULT UI checks failed");
             File.WriteAllLines(output, results);
             Application.Current.Shutdown(exit);
         }
