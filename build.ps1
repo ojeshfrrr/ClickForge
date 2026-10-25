@@ -18,4 +18,5 @@ $uiProcess = Start-Process -FilePath (Join-Path $PSScriptRoot 'artifacts/ui-buil
 if (-not $uiProcess.WaitForExit(40000)) { throw 'UI checks timed out' }
 Get-Content -LiteralPath artifacts/logs/ui-tests.txt | Write-Output
 if ($uiProcess.ExitCode) { throw 'UI checks failed; see artifacts/logs/ui-tests.txt' }
+if (-not (Select-String -LiteralPath artifacts/logs/ui-tests.txt -SimpleMatch 'RESULT UI checks completed successfully' -Quiet)) { throw 'UI process exited before completing all checks' }
 if (-not $SkipPackage) { & ./scripts/Package-Release.ps1 }
