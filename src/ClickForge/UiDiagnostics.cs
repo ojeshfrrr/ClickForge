@@ -12,7 +12,7 @@ namespace ClickForge;
 // It never sends mouse or keyboard input and uses its own settings file.
 public partial class MainWindow
 {
-    private sealed class DiagnosticMouse : IMouseInput { public void Click() { } public void Release() { } }
+    private sealed class DiagnosticMouse : IMouseInput { public void Click() { } public void Click(ClickButton button) { ClickButtons.Validate(button); } public bool Supports(ClickButton button) => button!=ClickButton.CustomKey&&Enum.IsDefined(button); public bool Supports(ClickButton button,int key)=>button==ClickButton.CustomKey?KeyboardOutput.IsValid(key):Supports(button);public void Click(ClickButton button,int key){KeyboardOutput.ValidateOutput(button,key);} public void Release() { } }
     private sealed class DiagnosticTarget : ITargetGate { public bool CanClick => true; }
     private async Task RunUiSelfTestAsync(string output)
     {
@@ -23,6 +23,20 @@ public partial class MainWindow
         try
         {
             Check(!engine.Enabled, "Startup never enables clicking");
+            var inspectionFacts = new SelectedTargetFacts { HasSelection = true, ProcessAlive = true, WindowExists = true, IdentityMatches = true, Foreground = true };
+            foreach (var invalid in new[] { inspectionFacts with { ProcessAlive = false }, inspectionFacts with { WindowExists = false }, inspectionFacts with { IdentityMatches = false }, inspectionFacts with { InspectionSucceeded = false } })
+                Check(DesktopTargetService.RetainedTitle(invalid, "Original selection", () => throw new InvalidOperationException("Unrelated title read")) == "Original selection" && SelectedFocusText(invalid) == "Unavailable", "Invalid selected identity cannot read unrelated title or claim observed focus: " + TargetStatus.Selected(invalid).Reason);
+            Check(DesktopTargetService.RetainedTitle(inspectionFacts, "Old title", () => "Current selected title") == "Current selected title" && SelectedFocusText(inspectionFacts) == "●  In focus", "Owned window metadata and focus remain observable despite other eligibility failures");
+            UpdateStatus();
+            Check(!engine.Session.HasStarted && SessionElapsedText.Text == "00:00:00" && SessionPairsText.Text == "0" && SessionAverageText.Text == "0.00", "Session dashboard starts at zero without activation");
+            Check(ClickButtonInput.Items.Cast<string>().SequenceEqual(new[] { "Left", "Mouse 4 (Back)", "Mouse 5 (Forward)", "Custom input key…" }) && engine.Button == ClickButton.Left, "Click-button selector exposes Custom input key with Left unchanged by default");
+            Hotkey(1); await Task.Delay(40); ClickButtonInput.SelectedIndex = 1;
+            Check(!engine.Enabled && engine.Button == ClickButton.Mouse4 && settings.Button == ClickButton.Mouse4, "Changing click button stops the shared engine without automatic restart");
+            ClickButtonInput.SelectedIndex = 2;
+            Check(new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "ui-test-settings.json")).Load().Button == ClickButton.Mouse5, "Actual button selector persists Mouse 5 settings");
+            ApplyProfile(TimingProfile.Capture(settings with { Button = ClickButton.Mouse4 }, "Button diagnostic"));
+            Check(ClickButtonInput.SelectedIndex == 1 && engine.Button == ClickButton.Mouse4 && !engine.Enabled, "Applying a button profile synchronizes selector and engine while stopped");
+            settings = settings with { ActiveProfileId = null }; ClickButtonInput.SelectedIndex = 0;
             CpsInput.Text = "19";
             Check(engine.Cps == 19 && CpsSlider.Value == 19 && IntervalText.Text.Contains("52.6"), "Numeric CPS updates slider, interval and actual engine");
             CpsInput.Text = "0";
@@ -34,12 +48,20 @@ public partial class MainWindow
             Check(engine.Enabled && engine.Clicks > 0, "Routed activation shortcut starts fake-input worker");
             Hotkey(2); long count = engine.Clicks; await Task.Delay(90);
             Check(engine.IsPaused && engine.Clicks == count, "Routed pause shortcut suspends cycles");
+            var averageBeforeRender = engine.Session.MeasuredAverageCps;
+            UpdateStatus();
+            Check(engine.Session.TimerRunning && engine.Session.Elapsed.TotalSeconds >= .20 && SessionPairsText.Text == engine.Session.InputPairsSent.ToString("N0"), "Session dashboard shows sent pairs and includes pause time");
+            double renderedAverage = double.Parse(SessionAverageText.Text);
+            Check(renderedAverage <= averageBeforeRender + .005 && renderedAverage >= engine.Session.MeasuredAverageCps - .005, "Measured average dashboard binds to session calculation while wall-clock advances");
             Hotkey(2); await Task.Delay(70);
             Check(!engine.IsPaused && engine.Clicks > count, "Routed pause shortcut resumes cycles");
             EmergencyButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Check(!engine.Enabled, "Emergency button stops immediately");
+            var stoppedSession = engine.Session; await Task.Delay(50); UpdateStatus();
+            Check(engine.Session == stoppedSession && !stoppedSession.TimerRunning, "Emergency button freezes dashboard session statistics");
             Hotkey(1); await Task.Delay(50); Hotkey(3);
             Check(!engine.Enabled, "Routed emergency shortcut stops immediately");
+            Check(engine.Session.Elapsed < stoppedSession.Elapsed && engine.Session.InputPairsSent < engine.Clicks, "Explicit activation resets session independently of run input count");
             HoldModeInput.IsChecked = true;
             Check(settings.Mode == ActivationMode.Hold && !engine.Enabled, "Hold segment changes mode without starting");
             var physicalGuard = engine.ActivationStillValid;
@@ -71,11 +93,41 @@ public partial class MainWindow
             bindings = new(new DiagnosticRegistrar());
             ResetClicked(this, new());
             Check(settings.Cps == 50 && settings.Mode == ActivationMode.Toggle && settings.RobloxOnly && settings.ActivateKey == 0x75 && !engine.Enabled, "Reset shortcuts preserves timing and target preferences while stopping input");
+            ActivateInput.SelectedIndex = 11; PauseInput.SelectedIndex = 12; ApplyClicked(this, new());
+            Check(settings.ActivateKey == 5 && settings.PauseKey == 6 && settings.StopKey == 0x77 && !engine.Enabled && StartKeyText.Text == "M4" && PauseKeyText.Text == "M5", "Mouse activation and pause shortcuts apply with correct labels and no automatic activation");
+            Check(new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "ui-test-settings.json")).Load().ActivateKey == 5, "Mouse hotkey selection persists through real UI actions");
+            Hotkey(1); await Task.Delay(50); Hotkey(2);
+            Check(engine.Enabled && engine.IsPaused, "Mouse shortcut command IDs reuse activation and pause behavior with mock input");
+            Hotkey(3); HoldModeInput.IsChecked = true; ClickButtonInput.SelectedIndex = 1; Hotkey(1);
+            Check(!engine.Enabled && MessageText.Text.Contains("different click-output") && ModeHelp.Text.Contains("different click-output"), "Hold with matching mouse output is blocked with a clear explanation");
+            ClickButtonInput.SelectedIndex = 0;
+            Check(ModeHelp.Text.Contains("Mouse 4 (Back)"), "Hold instructions display the selected mouse shortcut correctly");
+            ToggleModeInput.IsChecked = true; ResetClicked(this, new());
+            var mouseService = new GlobalHotkeyService(new WindowInteropHelper(this).Handle);
+            using (var mouseNative = new HotkeyBindings(mouseService))
+            {
+                try
+                {
+                    mouseNative.Apply(new Settings { ActivateKey = 5, PauseKey = 6, StopKey = 0x7A });
+                    results.Add("PASS Native dedicated-thread mouse hook installation and mixed keyboard/mouse bindings");
+                    nint generation = mouseService.MouseGeneration;
+                    Check(generation != 0 && mouseService.AcceptMouseMessage(1,generation) && !mouseService.AcceptMouseMessage(99,generation), "Mouse listener accepts only current registered command IDs");
+                    mouseNative.Dispose();
+                    Check(!mouseService.AcceptMouseMessage(1,generation), "Disposed mouse shortcuts reject queued activation events");
+                    mouseNative.Apply(new Settings { ActivateKey = 6, PauseKey = 5, StopKey = 0x7A });
+                    Check(mouseService.MouseGeneration != generation && !mouseService.AcceptMouseMessage(1,generation), "Replacement listener rejects obsolete mouse shortcut generations");
+                    results.Add("PASS Native mouse hook teardown and replacement with reversed mouse shortcuts");
+                }
+                catch (InvalidOperationException e) { results.Add("UNAVAILABLE Native mouse shortcut registration: " + e.Message); }
+            }
+            await RunCustomKeyDiagnosticsAsync(results,output);
             CpsInput.Text = "23"; ApplyClicked(this, new());
             Check(new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "ui-test-settings.json")).Load().Cps == 23, "Preferences persist through real UI actions");
             CpsInput.Text = "10"; UpdateStatus();
             VariableTimingInput.IsChecked = true;
             Check(settings.TimingMode == ClickTimingMode.Variable && engine.TimingMode == ClickTimingMode.Variable && !engine.Enabled, "Variable CPS selection updates existing engine without activation");
+            UpdateStatus();
+            Check(InspectorEligibilityText.Text.Contains("No target selected") && RobloxStatusText.Text == desktopTarget.Status.Label && !desktopTarget.Status.ChecksPassed, "Unselected variable target explains blocking without claiming readiness");
             Check(VariableSpeedPanel.Visibility == Visibility.Visible && FixedSpeedPanel.Visibility == Visibility.Collapsed && !RestrictInput.IsEnabled && settings.RobloxOnly, "Variable controls preserve fixed Roblox restriction preference");
             Check(MinimumCpsInput.Text == "5" && MaximumCpsInput.Text == "20", "Production variable defaults are 5 to 20 CPS");
             MinimumCpsInput.Text = "30";
@@ -117,6 +169,11 @@ public partial class MainWindow
             var popup = (System.Windows.Controls.Primitives.Popup)ActivateInput.Template.FindName("PART_Popup", ActivateInput);
             Check(popup.IsOpen && popup.Child is FrameworkElement, "Dark shortcut popup opens");
             RenderDiagnostic((FrameworkElement)popup.Child!, Path.Combine(Path.GetDirectoryName(output)!, "ui-dropdown.png"));
+            ActivateInput.IsDropDownOpen = false; int keyboardSelection = ActivateInput.SelectedIndex;
+            ActivateInput.SelectedIndex = 11; ActivateInput.IsDropDownOpen = true; await Task.Delay(50);
+            Check(ActivateInput.Items.Cast<string>().TakeLast(2).SequenceEqual(new[] { "Mouse 4 (Back)", "Mouse 5 (Forward)" }) && popup.IsOpen, "Actual dark hotkey popup exposes both mouse buttons");
+            RenderDiagnostic((FrameworkElement)popup.Child!, Path.Combine(Path.GetDirectoryName(output)!, "ui-mouse-hotkeys-dropdown.png"));
+            ActivateInput.IsDropDownOpen = false; ActivateInput.SelectedIndex = keyboardSelection;
             ActivateInput.IsDropDownOpen = false; ShortcutsExpander.IsExpanded = false;
             Width = 640; Height = 700; await Task.Delay(100); UpdateLayout();
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-small.png"));
@@ -125,7 +182,11 @@ public partial class MainWindow
             Check(scroll.VerticalOffset > 0, "Styled scrollbar reaches lower controls");
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-small-bottom.png"));
             using (var test = new DiagnosticTestWindowScope(this))
+            {
                 Check(test.Window.IsVisible, "Controlled test window opens and closes");
+                test.Window.ButtonSelector.SelectedIndex = 1;
+                Check(!test.Window.FixedTestEnabled && test.Window.ButtonSelector.Items[1].ToString() == "Mouse 4 (Back)", "Safe test offers side buttons without starting input on selection");
+            }
             Check(SafeTestModeInput.SelectedIndex == 0, "Safe test defaults to existing fixed-CPS profile");
             SafeTestModeInput.SelectedIndex = 1;
             Check(!engine.Enabled && engine.Cps == 10, "Variable profile selection leaves production settings and activation unchanged");
