@@ -1,6 +1,6 @@
 # Mouse 4 and Mouse 5 as global shortcuts
 
-> Historical implementation-stage verification record. For the published feature summary, see [v1.3.0 release notes](RELEASE-v1.3.0.md).
+> Historical implementation-stage verification record. For the published feature summary, see [v1.3.1 release notes](RELEASE-v1.3.1.md).
 
 This extends the previous selectable click-output buttons. All three Global shortcuts dropdowns now offer F1–F11, Mouse 4 (Back) and Mouse 5 (Forward). Scroll below F11 to find the mouse choices, then choose Apply shortcuts. Defaults remain F6 activation, F7 pause/resume and F8 emergency stop. Reset restores those shortcuts without resetting timing, click-output or target preferences. Global shortcuts remain application settings, not profile data.
 

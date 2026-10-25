@@ -1,6 +1,6 @@
 # Custom input key
 
-> Historical implementation-stage verification record. For the published feature summary, see [v1.3.0 release notes](RELEASE-v1.3.0.md).
+> Historical implementation-stage verification record. For the published feature summary, see [v1.3.1 release notes](RELEASE-v1.3.1.md).
 
 The click-output dropdown now includes **Custom input key…** after Left and Mouse 4/5. Selecting it stops input and opens a themed recorder. Press one supported keyboard key and choose Use key; Cancel/X restores the previous output and keeps input stopped. Change: key reopens the recorder. Start input and Sending keys distinguish keyboard output from mouse clicking. Settings and profiles capture the key, and profile application synchronizes the UI without activation.
 

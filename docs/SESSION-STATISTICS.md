@@ -1,6 +1,6 @@
 # Session statistics and target explanations
 
-> Historical implementation-stage verification record. For the published feature summary, see [v1.3.0 release notes](RELEASE-v1.3.0.md).
+> Historical implementation-stage verification record. For the published feature summary, see [v1.3.1 release notes](RELEASE-v1.3.1.md).
 
 The compact dashboard statistics show wall-clock elapsed time, session input pairs sent and measured average CPS. Average CPS is successful input-pair submissions divided by monotonic elapsed seconds; it is separate from configured CPS and says nothing about target acceptance. Elapsed time includes manual pauses and target waits, explicitly labeled in the UI. At zero duration the average is zero.
 

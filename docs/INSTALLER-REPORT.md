@@ -1,6 +1,6 @@
 # Windows installer implementation report
 
-> Historical implementation-stage verification record. For the published feature summary, see [v1.3.0 release notes](RELEASE-v1.3.0.md).
+> Historical implementation-stage verification record. For the published feature summary, see [v1.3.1 release notes](RELEASE-v1.3.1.md).
 
 ## Outcome
 

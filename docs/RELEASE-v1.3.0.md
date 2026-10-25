@@ -1,6 +1,8 @@
-# ClickForge v1.3.0
+# ClickForge v1.3.0 — unpublished candidate
 
-This release brings the local v1.2.0 candidate and subsequent input/statistics improvements to the public update channel. Existing v1.1.x releases and local v1.2.0 builds can discover v1.3.0 through Updates.
+This candidate was not published: the installer GUI shutdown test failed and prevented publication. See [v1.3.1](RELEASE-v1.3.1.md) for the corrected release.
+
+The planned release brings the local v1.2.0 candidate and subsequent input/statistics improvements to the public update channel. Existing v1.1.x releases and local v1.2.0 builds can discover v1.3.0 through Updates.
 
 ## Changes
 

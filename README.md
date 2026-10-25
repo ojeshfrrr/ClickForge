@@ -1,6 +1,6 @@
 # ClickForge
 
-A native Windows mouse-click and key-repeat utility built with C# and WPF. **v1.3.0** includes Fixed/Variable CPS, mouse/keyboard output, global keyboard/mouse shortcuts, session statistics, foreground restrictions, profiles, an optional system tray workflow and in-app updates. See the [release notes](docs/RELEASE-v1.3.0.md).
+A native Windows mouse-click and key-repeat utility built with C# and WPF. **v1.3.1** includes Fixed/Variable CPS, mouse/keyboard output, global keyboard/mouse shortcuts, session statistics, foreground restrictions, profiles, an optional system tray workflow and in-app updates. See the [release notes](docs/RELEASE-v1.3.1.md).
 
 The application uses an obsidian-and-champagne interface with responsive navigation and a genuine target/profile inspector. See the [redesign, complete change list and verification report](docs/OBSIDIAN-REDESIGN.md).
 

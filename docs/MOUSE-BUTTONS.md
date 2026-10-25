@@ -1,6 +1,6 @@
 # Selectable mouse buttons
 
-> Historical implementation-stage verification record. For the published feature summary, see [v1.3.0 release notes](RELEASE-v1.3.0.md).
+> Historical implementation-stage verification record. For the published feature summary, see [v1.3.1 release notes](RELEASE-v1.3.1.md).
 
 ClickForge supports **Left**, **Mouse 4 (Back)** and **Mouse 5 (Forward)** in both Fixed and Variable CPS. The new themed selector is beside Click speed, with accessible labeling and a wrapping layout at narrow widths. Left remains the default. A changed choice synchronously stops the current request, releases any pending button, persists the choice and requires explicit activation. Profiles capture, apply, match, import and export the choice; application still stops input and never changes target restrictions.
 
