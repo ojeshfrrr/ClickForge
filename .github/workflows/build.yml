@@ -86,6 +86,8 @@ jobs:
           $generated = gh api "repos/$env:GITHUB_REPOSITORY/releases/generate-notes" -X POST -f "tag_name=$tag" -f "target_commitish=$env:GITHUB_SHA" | ConvertFrom-Json
           if ($LASTEXITCODE) { throw 'Release notes generation failed' }
           $notes = "Windows x64. Recommended: run $setupName for a per-user installation with optional Desktop and Start menu shortcuts. Portable: extract $name and keep the helper next to ClickForge.exe. See docs/INSTALLING.md and docs/UPDATING.md. Build/test, installer lifecycle and package verification jobs passed. Unsigned release; SHA-256 is not publisher authentication. Source: $env:GITHUB_SHA`n`nSHA-256: $hash  $name`nSHA-256: $setupHash  $setupName`n`n" + $generated.body
+          $releaseSummary = "docs/RELEASE-v$version.md"
+          if (Test-Path -LiteralPath $releaseSummary) { $notes += "`n`n" + [IO.File]::ReadAllText($releaseSummary) }
           [IO.File]::WriteAllText('artifacts/release-notes.md', $notes)
           gh release create $tag $zip "$zip.sha256" $setup "$setup.sha256" --repo $env:GITHUB_REPOSITORY --verify-tag --target $env:GITHUB_SHA --draft --title "ClickForge $tag" --notes-file artifacts/release-notes.md
           if ($LASTEXITCODE) { throw 'Draft upload failed; inspect it before retrying' }
