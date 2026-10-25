@@ -1,1 +1,1 @@
-<Project><PropertyGroup><ClickForgeVersion>1.1.2</ClickForgeVersion><Version>$(ClickForgeVersion)</Version></PropertyGroup></Project>
+<Project><PropertyGroup><ClickForgeVersion>1.2.0</ClickForgeVersion><Version>$(ClickForgeVersion)</Version></PropertyGroup></Project>
