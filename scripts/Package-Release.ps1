@@ -44,6 +44,11 @@ Windows 11 x64 is recommended. Windows 10 support follows the .NET 10 OS matrix.
 The application and helper are unsigned. Do not disable Windows security tools.
 
 F6: Toggle/hold activation. F7: Pause/resume. F8: Emergency stop.
+Global shortcuts also support Mouse 4 (Back) and Mouse 5 (Forward).
+Choose Left, Mouse 4, Mouse 5, or Custom input key beside Click speed.
+Custom output repeats a single keyboard key; shortcut conflicts are rejected.
+Changing output stops input. Session statistics count submitted input pairs,
+not target acceptance; elapsed time includes pauses and target waits.
 Clicking starts disabled. Roblox foreground restriction is on by default.
 Variable CPS requires an explicitly selected window; verified Roblox clients are supported.
 Variable Timing in Safe Click Test remains an isolated logical simulation.
