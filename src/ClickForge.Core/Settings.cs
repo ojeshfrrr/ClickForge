@@ -14,10 +14,13 @@ public sealed record Settings
     public int PauseKey { get; init; } = 0x76;
     public int StopKey { get; init; } = 0x77;
     public bool RobloxOnly { get; init; } = true;
-    public double Width { get; init; } = 880;
-    public double Height { get; init; } = 900;
+    public double Width { get; init; } = 1280;
+    public double Height { get; init; } = 920;
     public int LayoutVersion { get; init; }
     public bool CheckForUpdatesOnStartup { get; init; }
+    public bool MinimizeToTray { get; init; }
+    public bool CloseToTray { get; init; }
+    public Guid? ActiveProfileId { get; init; }
     public void Validate()
     {
         Speed.Validate(Cps);
@@ -43,26 +46,20 @@ public sealed class SettingsService(string path)
     {
         try
         {
+            Warning = null;
             if (!File.Exists(path)) return new();
+            if (new FileInfo(path).Length > 32768) throw new JsonException("Configuration too large.");
             var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path)) ?? throw new JsonException("Empty configuration.");
             settings.Validate();
             return settings;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
-        { Warning = "Settings could not be loaded. Defaults restored. " + e.Message; return new(); }
+        { Warning = "Settings could not be loaded. Defaults restored. Check folder access or restore a valid settings file."; return new(); }
     }
     public void Save(Settings settings)
     {
         settings.Validate();
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        string temporary = path + ".tmp";
-        try
-        {
-            File.WriteAllText(temporary, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
-            if (File.Exists(path)) File.Replace(temporary, path, null);
-            else File.Move(temporary, path);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        UserData.Write(path, settings, new JsonSerializerOptions { WriteIndented = true });
     }
 }
 
