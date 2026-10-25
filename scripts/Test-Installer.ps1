@@ -74,14 +74,22 @@ try {
     $link=$shell.CreateShortcut($desktop); $link.TargetPath=Join-Path $env:WINDIR 'System32/notepad.exe'; $link.Save()
     Check ((RunSetup $setup @('/TASKS=desktopicon,startmenuicon')) -ne 0 -and $shell.CreateShortcut($desktop).TargetPath -eq (Join-Path $env:WINDIR 'System32/notepad.exe')) 'Setup refuses to overwrite an unrelated same-name Desktop shortcut'
     $uninstaller=Join-Path $install 'unins000.exe'
-    $running = Start-Process -FilePath (Join-Path $install 'ClickForge.exe') -ArgumentList '--ui-interactive-test',('"'+(Join-Path $work 'manual-test.txt')+'"') -WindowStyle Hidden -PassThru
+    # This is the GUI lifecycle probe, not a background helper. A hidden window
+    # has no Process.MainWindowHandle on some Windows runners, so CloseMainWindow
+    # cannot request shutdown even though the application's guard already exists.
+    $running = Start-Process -FilePath (Join-Path $install 'ClickForge.exe') -ArgumentList '--ui-interactive-test',('"'+(Join-Path $work 'manual-test.txt')+'"') -WindowStyle Normal -PassThru
     $clock=[Diagnostics.Stopwatch]::StartNew(); $guard=$null
     while($clock.Elapsed.TotalSeconds -lt 15 -and -not $guard) { try{$guard=[Threading.Mutex]::OpenExisting('Local\ClickForge.SetupGuard')} catch [Threading.WaitHandleCannotBeOpenedException] {Start-Sleep -Milliseconds 100} }
     if($guard){$guard.Dispose()}
     Check (-not $running.HasExited -and $null -ne $guard) 'Installed application exposes its lifetime guard with mocked input and disposable settings'
+    $inputReady = $running.WaitForInputIdle(15000)
+    $clock.Restart()
+    do { $running.Refresh(); if($running.HasExited -or $running.MainWindowHandle -ne 0){break}; Start-Sleep -Milliseconds 100 } while($clock.Elapsed.TotalSeconds -lt 15)
+    Check ($inputReady -and -not $running.HasExited -and $running.MainWindowHandle -ne 0) 'Installed GUI is ready and exposes a visible main window before shutdown checks'
     Check ((RunSetup $setup) -ne 0 -and -not $running.HasExited) 'Setup refuses replacement while ClickForge is running without force-closing it'
     Check ((RunSetup $uninstaller) -ne 0 -and -not $running.HasExited -and (Test-Path -LiteralPath $registration)) 'Uninstall refuses a running application without killing it or removing registration'
-    $null=$running.CloseMainWindow(); Check ($running.WaitForExit(10000)) 'Installed application closes through normal coordinated shutdown'; $running=$null
+    Check ($running.CloseMainWindow()) 'Installed GUI accepts the normal close request'
+    Check ($running.WaitForExit(10000)) 'Installed application closes through normal coordinated shutdown'; $running=$null
     $report=Join-Path $work 'installed-ui-tests.txt'
     $p=Start-Process -FilePath (Join-Path $install 'ClickForge.exe') -ArgumentList '--ui-self-test',('"'+$report+'"') -WindowStyle Hidden -PassThru
     if(-not $p.WaitForExit(45000)){throw 'Installed UI test timed out'}
