@@ -6,13 +6,13 @@ namespace ClickForge;
 
 internal static class DialogLayout
 {
-    internal static void Setup(Window window, string title, double width, double height)
+    internal static void Setup(Window window, string title, double width, double height, bool escapeCloses = true)
     {
         window.Title = "ClickForge · " + title; window.Width = width; window.Height = Math.Min(height, Math.Max(500, SystemParameters.WorkArea.Height - 40));
         window.MinWidth = 460; window.MinHeight = 450; window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
         window.SetResourceReference(Window.BackgroundProperty, "Base"); window.SetResourceReference(Window.ForegroundProperty, "Text"); window.SetResourceReference(Window.IconProperty, "ForgeIcon");
         KeyboardNavigation.SetTabNavigation(window, KeyboardNavigationMode.Cycle);
-        window.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { window.Close(); e.Handled = true; } };
+        if(escapeCloses) window.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { window.Close(); e.Handled = true; } };
     }
     internal static TextBlock Text(string text, bool hint = false)
     {
