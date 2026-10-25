@@ -6,6 +6,8 @@ public enum ActivationMode { Toggle, Hold }
 public sealed record Settings
 {
     public int Cps { get; init; } = 10;
+    public ClickButton Button { get; init; }
+    public int CustomKey { get; init; }
     public ClickTimingMode TimingMode { get; init; }
     public int MinimumCps { get; init; } = 5;
     public int MaximumCps { get; init; } = 20;
@@ -24,12 +26,14 @@ public sealed record Settings
     public void Validate()
     {
         Speed.Validate(Cps);
+        KeyboardOutput.ValidateOutput(Button,CustomKey);
         if (!Enum.IsDefined(TimingMode)) throw new ArgumentException("Invalid click speed mode.");
         _ = new CpsRange(MinimumCps, MaximumCps);
         if (!Enum.IsDefined(Mode)) throw new ArgumentException("Invalid activation mode.");
         int[] keys = [ActivateKey, PauseKey, StopKey];
-        if (keys.Any(k => k < 0x70 || k > 0x7A)) throw new ArgumentException("Choose a function key from F1 to F11.");
+        if (keys.Any(k => !ShortcutKeys.IsValid(k))) throw new ArgumentException("Choose F1–F11, Mouse 4 (Back), or Mouse 5 (Forward).");
         if (keys.Distinct().Count() != 3) throw new ArgumentException("Each shortcut must use a different key.");
+        if (Button == ClickButton.CustomKey && keys.Contains(CustomKey)) throw new ArgumentException("The custom output key cannot match Activate, Pause, or Emergency stop. Choose another output key or shortcut.");
         if (!double.IsFinite(Width) || !double.IsFinite(Height) || Width < 420 || Width > 1400 || Height < 600 || Height > 1600)
             throw new ArgumentException("Invalid window size.");
     }
@@ -77,7 +81,7 @@ public sealed class HotkeyBindings(IHotkeyRegistrar registrar) : IDisposable
             // Reserve the emergency key first. Partial registrations are always rolled back.
             foreach (int i in new[] { 2, 0, 1 })
             {
-                if (!registrar.Register(i + 1, keys[i])) throw new InvalidOperationException($"F{keys[i] - 0x6F} is unavailable. Another application may own it. Choose another key and apply shortcuts.");
+                if (!registrar.Register(i + 1, keys[i])) throw new InvalidOperationException($"{ShortcutKeys.Label(keys[i])} is unavailable. Check shortcut registration, choose another shortcut, and apply again.");
                 ids.Add(i + 1);
             }
         }

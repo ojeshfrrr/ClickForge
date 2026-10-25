@@ -16,7 +16,9 @@ public sealed record TimingProfile
     [JsonRequired] public int MinimumCps { get; init; } = 5;
     [JsonRequired] public int MaximumCps { get; init; } = 20;
     [JsonRequired] public ActivationMode ActivationMode { get; init; }
-    [JsonIgnore] public string Summary => TimingMode == ClickTimingMode.Fixed ? $"Fixed · {FixedCps} CPS" : $"Variable · {MinimumCps}–{MaximumCps} CPS";
+    public ClickButton Button { get; init; }
+    public int CustomKey { get; init; }
+    [JsonIgnore] public string Summary => (TimingMode == ClickTimingMode.Fixed ? $"Fixed · {FixedCps} CPS" : $"Variable · {MinimumCps}–{MaximumCps} CPS") + " · " + ClickButtons.OutputLabel(Button,CustomKey);
     public override string ToString() => Name + " · " + Summary;
     public void Validate()
     {
@@ -26,19 +28,20 @@ public sealed record TimingProfile
         if (Description is null || Description.Length > 500 || Description.Any(c => char.IsControl(c) && c != '\n' && c != '\r')) throw new ArgumentException("Use a description of up to 500 characters.");
         if (Created == default || Modified < Created) throw new ArgumentException("The profile timestamps are invalid.");
         Speed.Validate(FixedCps); _ = new CpsRange(MinimumCps, MaximumCps);
+        KeyboardOutput.ValidateOutput(Button,CustomKey);
         if (!Enum.IsDefined(TimingMode) || !Enum.IsDefined(ActivationMode)) throw new ArgumentException("The profile timing or activation mode is invalid.");
     }
-    public static TimingProfile Capture(Settings value, string name) => new() { Name = name.Trim(), FixedCps = value.Cps, MinimumCps = value.MinimumCps, MaximumCps = value.MaximumCps, TimingMode = value.TimingMode, ActivationMode = value.Mode };
+    public static TimingProfile Capture(Settings value, string name) => new() { Name = name.Trim(), FixedCps = value.Cps, MinimumCps = value.MinimumCps, MaximumCps = value.MaximumCps, TimingMode = value.TimingMode, ActivationMode = value.Mode, Button = value.Button, CustomKey = value.CustomKey };
     public Settings Apply(Settings current, ClickEngine engine)
     {
         Validate();
-        var next = current with { Cps = FixedCps, MinimumCps = MinimumCps, MaximumCps = MaximumCps, TimingMode = TimingMode, Mode = ActivationMode, ActiveProfileId = Id };
+        var next = current with { Cps = FixedCps, MinimumCps = MinimumCps, MaximumCps = MaximumCps, TimingMode = TimingMode, Mode = ActivationMode, Button = Button, CustomKey = CustomKey, ActiveProfileId = Id };
         next.Validate();
         engine.Stop(); // Synchronous barrier waits for an in-flight input pair.
-        engine.Cps = FixedCps; engine.ConfigureTiming(TimingMode, new(MinimumCps, MaximumCps));
+        engine.Cps = FixedCps; engine.ConfigureTiming(TimingMode, new(MinimumCps, MaximumCps)); engine.ConfigureOutput(Button,CustomKey);
         return next; // No target, restriction, shortcut or active state is profile data.
     }
-    public bool Matches(Settings value) => FixedCps == value.Cps && MinimumCps == value.MinimumCps && MaximumCps == value.MaximumCps && TimingMode == value.TimingMode && ActivationMode == value.Mode;
+    public bool Matches(Settings value) => FixedCps == value.Cps && MinimumCps == value.MinimumCps && MaximumCps == value.MaximumCps && TimingMode == value.TimingMode && ActivationMode == value.Mode && Button == value.Button && CustomKey == value.CustomKey;
 }
 
 public sealed class ProfileStore(string directory)
