@@ -1,16 +1,33 @@
 # ClickForge
 
-A native, dark-mode Windows left-click utility built with C# and WPF. Includes fixed and variable CPS, global shortcuts, foreground restrictions, in-app updates and an isolated logical timing simulator.
+A native, dark-mode Windows left-click utility built with C# and WPF. Includes fixed and variable CPS, global shortcuts, foreground restrictions, in-app updates and an isolated logical timing simulator. The local **v1.2.0 candidate** adds Windows Setup, configuration profiles, an optional system tray workflow, accessible controls, and redacted diagnostics. It has not been published.
+
+The candidate uses an obsidian-and-champagne interface with responsive navigation and a genuine target/profile inspector. See the [redesign, complete change list and verification report](docs/OBSIDIAN-REDESIGN.md).
 
 ![ClickForge application](docs/screenshot.png)
 
 ## Download and run
 
-Open the [latest public release](https://github.com/ojeshfrrr/ClickForge/releases/latest), download **ClickForge-v<version>-win-x64.zip**, and extract the entire ZIP. Close any older ClickForge instance, then open **ClickForge.exe**.
+There are two distribution choices. The installer is included in the local v1.2.0 candidate; public v1.1.2 remains ZIP-only until a separate release is authorized.
+
+**Recommended: Windows installer**
+
+1. Download **ClickForge-Setup-v<version>.exe** from a release that includes it.
+2. Run Setup. It installs for your Windows account under `%LOCALAPPDATA%\Programs\ClickForge`, with no normal administrator requirement.
+3. Keep **Create Desktop shortcut** and **Create Start menu shortcut** checked, or opt out of either.
+4. Launch **ClickForge** from the Desktop or Start menu. Clicking always starts disabled.
+
+**Portable ZIP**
+
+1. Download **ClickForge-v<version>-win-x64.zip** from the [latest public release](https://github.com/ojeshfrrr/ClickForge/releases/latest).
+2. Extract the entire ZIP into a stable folder you own.
+3. Open **ClickForge.exe** there, keeping the helper alongside it.
+
+The installer is easier for everyday use and keeps the application out of Downloads. Both distributions use the same self-contained payload and existing in-app updater. See [installation, uninstall and build details](docs/INSTALLING.md).
 
 - **Windows x64** only; Windows 11 is recommended. Windows 10 support depends on the edition and lifecycle listed in the [.NET 10 supported OS matrix](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md). Older Windows builds and other architectures are not release-tested.
 - The portable, self-contained release includes .NET 10: a separate .NET installation is not required.
-- No installer, administrator access, driver or background service is required.
+- No administrator access, driver, service or startup task is required. The portable option remains available without installation.
 - Clicking starts disabled every time. Settings never restore an active session.
 - The executable is unsigned. No Microsoft signing or approval is claimed. Do not disable antivirus to run it.
 
@@ -18,11 +35,27 @@ Some Roblox experiences prohibit autoclickers. Using automated clicking may viol
 
 ## In-app updates (1.1.1 and later)
 
-Open **Updates** in the header for the installed/latest version, release notes and a manual check. Optional startup checks default off. **Update now** downloads and verifies the stable Windows x64 package; **Install and restart** requires a separate confirmation. **Later** defers it. Download/check cancellation and friendly offline/rate-limit errors leave the app usable.
+Open **Updates** in the navigation rail for the installed/latest version, release notes and a manual check. Optional startup checks default off. **Update now** downloads and verifies the stable Windows x64 package; **Install and restart** requires a separate confirmation. **Later** defers it. Download/check cancellation and friendly offline/rate-limit errors leave the app usable.
 
 Keep `ClickForge.Updater.exe` beside `ClickForge.exe`. The independent helper waits for clean shutdown, backs up managed files, replaces/verifies the package, and requires a version-specific startup acknowledgement before success. Rollback preserves settings. Updates always restart with clicking disabled. No administrator access is requested.
 
 The existing **v1.0.0 needs one manual bootstrap download**, because that executable did not contain update code. Only a newly published matching version tag produces an update; a main-branch push does not. See [the complete updating/recovery guide](docs/UPDATING.md) for exact version/tag commands, package contents, workflow behavior and verification limits. SHA-256 is integrity checking, not a digital publisher signature.
+
+## Profiles, tray and everyday use (v1.2.0 candidate)
+
+Open **Profiles** in the navigation rail to create a named configuration from the current timing controls. Select a profile to review its summary, then **Apply profile**. Application stops the current request, leaves the selected target unchanged, and requires explicit activation. Profiles remember Fixed/Variable CPS, the fixed rate, minimum/maximum rates and Toggle/Hold activation. Shortcuts and target restrictions remain application preferences. The header identifies the applied profile and shows **modified** after timing edits.
+
+The profile manager supports rename, description, saving current timing into an existing profile, duplicate, confirmed delete, import/export, and restoring the two built-in profiles. Import creates an independent copy and never applies it automatically. Deleting the active profile keeps the current timing configuration and stops input. Restoring application defaults keeps saved profile files.
+
+Profiles use separate versioned JSON files in `%LOCALAPPDATA%/ClickForge/Profiles/<id>.json`; preferences remain in `settings.json`. A malformed profile is skipped while other valid profiles remain available. Writes use per-path locks, flushed temporary files and atomic replacement. Imports are limited to 16 KiB, 100 stored profiles, 80-character names and 500-character descriptions. Unknown fields, duplicate properties, invalid rates/enums, unsupported versions, scripts, target identities and safety overrides are rejected. See [the JSON format and candidate verification report](docs/V1.2.0.md).
+
+ClickForge registers one real Windows notification-area icon. Its menu opens the existing window, routes Start/Stop and Pause/Resume through the normal controls, provides Emergency Stop, and opens Profiles, Updates and Settings. **Exit ClickForge** performs full cleanup. A second ordinary launch restores the existing instance. The tray tooltip reports actual engine state, including waiting for a target. Windows may place the icon in its overflow area.
+
+**Minimize to tray** and **Close to tray** are separate, opt-in Settings preferences, both off by default. Hiding stops input; restoring never starts it. Hiding is available only while the tray icon exists and no owned dialog is open. If tray initialization fails, the app keeps ordinary window behavior. Windows session ending and updater restart use the coordinated exit path regardless of close-to-tray preferences.
+
+Settings includes current version, Windows version, engine/timing state, shortcut status, update state and a bounded in-memory activity history. Copy or export a redacted report for troubleshooting; it omits profile names, target identities and local paths. History retains at most 100 meaningful events, never individual clicks, and can be cleared. It is not written to disk unless explicitly exported.
+
+Controls expose accessible labels, visible keyboard focus, ordinary Tab/Shift+Tab navigation and polite state announcements. Profile dialogs support Escape without applying pending edits. Expand **Global shortcuts** to change key assignments; the main action row always shows the active shortcuts. There are no animated transitions, so reduced-motion settings need no animation suppression. Smaller windows scroll intentionally. Native display scaling and screen-reader verification limits are recorded in the candidate report.
 
 ## Features and controls
 
@@ -108,7 +141,9 @@ Optional `--preview-size 640 700` checks the narrow layout.
 ## Architecture
 
 - `ClickForge.Core`: fixed click scheduling/lifecycle, reusable interruptible timing, settings/hotkey validation and the independent logical simulator.
+- `Profiles.cs`, `UserData.cs`, `ActivityHistory.cs`: strict portable profile schema/storage, shared atomic writes and bounded redacted events.
 - `ClickForge`: WPF views, reusable theme dictionary, SendInput interop, foreground signature/publisher verification, global hotkeys and the controlled test window.
+- `TrayService.cs`, `SingleInstance.cs`: native Shell notification-area integration and a per-user, per-session mutex/open signal. No additional UI framework or tray dependency.
 - `ClickForge.Tests`: dependency-free executable test harness covering timing, cancellation, cleanup, persistence, hotkey failures and simulator isolation.
 - `UiDiagnostics.cs`: opt-in real-control tests with mocked input and runtime-rendered screenshots.
 

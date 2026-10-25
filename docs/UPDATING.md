@@ -63,9 +63,15 @@ The ZIP contains exactly:
 
 The manifest has format version 1, the release version, a source commit and hashes of the six payload files. There are no settings defaults, user databases, scripts, debug symbols or private configuration in the package. Older ZIPs without this contract cannot be installed by the updater.
 
+The v1.2.0 candidate embeds its tray, theme and native icon resources in the WPF executable, so the payload contract is unchanged. Profiles live under `%LOCALAPPDATA%/ClickForge/Profiles`, outside the installation. The updater replaces only the manifest-managed payload; success and rollback tests also verify unrelated profile files remain byte-identical. Close-to-tray is explicitly bypassed for updater shutdown, and startup never restores an active click session. This task prepares a local review package only; no v1.2.0 tag or release is published.
+
+The added Inno Setup installer wraps the same verified ZIP payload and installs it per-user at `%LOCALAPPDATA%/Programs/ClickForge`. Its uninstaller and registry registration are not update payload entries. Desktop/Start menu shortcuts continue targeting the same installed executable through updates. The application refreshes its registered display version only for an owned registration at that exact path. The in-app updater still chooses the ZIP/checksum pair when a release also contains Setup; it never downloads or runs Setup. See [installation details](INSTALLING.md).
+
+Future trusted matching-tag release jobs produce and validate both `ClickForge-v<version>-win-x64.zip` and `ClickForge-Setup-v<version>.exe`, plus a separate SHA-256 file for each. The workflow executes native installer lifecycle and helper checks before uploading all four assets to a draft, then verifies all uploaded asset sizes and digests before publication. No new branch-publish path is added.
+
 ## Discovery, download and verification
 
-Open **Updates** in the main header. The current version is assembly-derived. **Check for updates** asynchronously requests the configured public endpoint `https://api.github.com/repos/ojeshfrrr/ClickForge/releases/latest`, confirmed from `origin`.
+Open **Updates** in the navigation rail. The current version is assembly-derived. **Check for updates** asynchronously requests the configured public endpoint `https://api.github.com/repos/ojeshfrrr/ClickForge/releases/latest`, confirmed from `origin`.
 
 The manual check has a 15-second timeout. Optional startup checks default off and never install anything automatically. API failures, missing assets, malformed responses and rate limits leave normal clicking functionality available. One request/operation at a time prevents duplicate checks/downloads.
 
