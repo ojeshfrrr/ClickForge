@@ -3,7 +3,14 @@ using System.Diagnostics;
 namespace ClickForge.Core;
 
 public enum EngineState { Stopped, Running, Paused, Error }
-public interface IMouseInput { void Click(); void Release(); }
+public interface IMouseInput
+{
+    void Click(); void Release();
+    bool Supports(ClickButton button) => button == ClickButton.Left;
+    void Click(ClickButton button) { if (button != ClickButton.Left || !Supports(button)) throw new InvalidOperationException($"{ClickButtons.Label(button)} is not supported by the input service. No other button was sent."); Click(); }
+    bool Supports(ClickButton button,int key) => button != ClickButton.CustomKey && Supports(button);
+    void Click(ClickButton button,int key) { if (button == ClickButton.CustomKey) throw new InvalidOperationException("Custom keyboard input is unsupported. No fallback input was sent."); Click(button); }
+}
 public interface ITargetGate { bool CanClick { get; } }
 public sealed class ClickSchedule
 {
@@ -14,7 +21,7 @@ public sealed class ClickSchedule
     public int WaitMilliseconds(double now) => (int)Math.Clamp(Math.Ceiling(Next - now), 0, 50);
 }
 
-public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariableTargetGate? variableTarget = null) : IDisposable
+public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariableTargetGate? variableTarget = null, TimeProvider? timeProvider = null) : IDisposable
 {
     private readonly object gate = new();
     private readonly LoopWaiter wake = new();
@@ -28,6 +35,21 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
     private EngineState state;
     private string? error;
     private long clicks;
+    private ClickButton button;
+    private int customKey;
+    public int CustomKey { get { lock(gate) return customKey; } }
+    public ClickButton Button
+    {
+        get { lock (gate) return button; }
+        set { lock(gate) ConfigureOutput(value,customKey); }
+    }
+    public void ConfigureOutput(ClickButton value,int key)
+    {
+        KeyboardOutput.ValidateOutput(value,key);
+        lock(gate) { ObjectDisposedException.ThrowIf(disposed,this); if(button==value&&customKey==key)return; Stop(); button=value;customKey=key; }
+    }
+    private readonly SessionStatistics session = new(timeProvider);
+    public SessionSnapshot Session { get { lock (gate) return session.Snapshot(clicks); } }
     public Func<bool> ActivationStillValid { get; set; } = () => true;
     public EngineState State { get { lock (gate) return state; } }
     public string? Error { get { lock (gate) return error; } }
@@ -44,7 +66,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
             ObjectDisposedException.ThrowIf(disposed, this);
             if (timingMode == mode && range == variableRange) return;
             // Configuration changes form a stop barrier. A fresh activation is explicit.
-            enabled = false; paused = false; ReleaseSafely();
+            enabled = false; paused = false; session.Stop(clicks); ReleaseSafely();
             if (state != EngineState.Error) state = EngineState.Stopped;
             timingMode = mode; range = variableRange; sequence = new(variableRange); revision++;
             wake.Set();
@@ -61,8 +83,10 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             if (enabled) return;
+            if (!input.Supports(button,customKey)) throw new InvalidOperationException($"{ClickButtons.OutputLabel(button,customKey)} is not supported by the input service. Select a supported input. No fallback input was sent.");
             if (timingMode == ClickTimingMode.Variable && variableTarget?.CanActivate != true)
                 throw new InvalidOperationException("Select an eligible target window, then activate from ClickForge or that window. Roblox must be a verified client.");
+            session.Start(clicks);
             enabled = true; paused = false; error = null;
             state = EngineState.Paused;
             worker ??= Task.Factory.StartNew(Loop, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -75,6 +99,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
         {
             if (disposed) return;
             enabled = false; paused = false;
+            session.Stop(clicks);
             if (state != EngineState.Error) state = EngineState.Stopped;
             ReleaseSafely(); wake.Set();
         }
@@ -89,7 +114,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
             wake.Set();
         }
     }
-    private void Fail(Exception e) { enabled = false; paused = false; state = EngineState.Error; error = e.Message; }
+    private void Fail(Exception e) { enabled = false; paused = false; session.Stop(clicks); state = EngineState.Error; error = e.Message; }
     private void ReleaseSafely() { try { input.Release(); } catch (Exception e) { Fail(e); } }
     private void Loop()
     {
@@ -106,7 +131,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
                 if (disposed) return;
                 try
                 {
-                    if (enabled && !ActivationStillValid()) { enabled = false; paused = false; state = EngineState.Stopped; ReleaseSafely(); }
+                    if (enabled && !ActivationStillValid()) { enabled = false; paused = false; session.Stop(clicks); state = EngineState.Stopped; ReleaseSafely(); }
                     bool active = enabled && !paused && (timingMode == ClickTimingMode.Variable ? variableTarget?.CanClick == true : target.CanClick);
                     if (!active)
                     {
@@ -128,7 +153,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
                         if (schedule.WaitMilliseconds(now) == 0)
                         {
                             // Stop and pause share this lock: no new pair can begin after either returns.
-                            input.Click(); Interlocked.Increment(ref clicks);
+                            input.Click(button,customKey); Interlocked.Increment(ref clicks);
                             if (timingMode == ClickTimingMode.Variable) schedule.AdvanceInterval(clock.Elapsed.TotalMilliseconds, sequence.NextMilliseconds());
                             else schedule.Advance(clock.Elapsed.TotalMilliseconds, cps);
                         }
@@ -147,6 +172,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
         {
             if (disposed) return;
             enabled = false; paused = false; disposed = true;
+            session.Stop(clicks);
             ReleaseSafely(); if (state != EngineState.Error) state = EngineState.Stopped;
             wake.Set();
         }
