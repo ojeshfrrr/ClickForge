@@ -11,6 +11,25 @@ internal sealed record DesktopWindow(nint Handle, int ProcessId, long Started, s
 
 internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
 {
+    internal sealed record Inspection(string Identity, string Title, bool VerifiedRoblox, bool Valid, bool Foreground, bool PointerInside);
+    internal Inspection? Snapshot
+    {
+        get
+        {
+            lock (gate)
+            {
+                if (selected is null) return null;
+                bool valid = false, foreground = false, pointer = false;
+                try
+                {
+                    valid = SelectionValid(); foreground = valid && Native.GetForegroundWindow() == selected.Handle;
+                    pointer = valid && Native.GetCursorPos(out var point) && Native.GetAncestor(Native.WindowFromPoint(point), 2) == selected.Handle;
+                }
+                catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
+                return new(System.IO.Path.GetFileName(selected.Path), valid ? Title(selected.Handle) : selected.Title, selected.VerifiedRoblox, valid, foreground, pointer);
+            }
+        }
+    }
     private readonly object gate = new();
     private DesktopWindow? selected;
     private Process? process;
