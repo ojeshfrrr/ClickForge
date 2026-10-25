@@ -5,9 +5,9 @@ using System.Text.Json;
 using ClickForge.Core;
 using ClickForge.Core.Updates;
 
-if (args.Length == 3 && args[0] == "--verify-package")
+if (args.Length is 3 or 4 && args[0] == "--verify-package")
 {
-    string stage = Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "updater", "verify-" + Guid.NewGuid().ToString("N"));
+    string stage = args.Length == 4 ? Path.GetFullPath(args[3]) : Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "updater", "verify-" + Guid.NewGuid().ToString("N"));
     var manifest = new UpdatePackage().ExtractAndVerify(Path.GetFullPath(args[1]), stage, SemanticVersion.Parse(args[2]), default);
     Console.WriteLine($"VERIFIED package {manifest.Version}, source {manifest.SourceCommit}, {manifest.Files.Count} payload files"); return 0;
 }
@@ -25,6 +25,16 @@ var installed = SemanticVersion.Parse("1.1.0+commit");
 
 await Test("Semantic version precedence and build metadata", () => Done(() => { Check(SemanticVersion.Parse("v1.10.0").CompareTo(SemanticVersion.Parse("1.9.9")) > 0); Check(installed.CompareTo(SemanticVersion.Parse("1.1.0+other")) == 0); Check(SemanticVersion.Parse("1.2.0-beta.10").CompareTo(SemanticVersion.Parse("1.2.0-beta.2")) > 0); Check(SemanticVersion.Parse("1.2.0").CompareTo(SemanticVersion.Parse("1.2.0-rc.1")) > 0); }));
 await Test("Malformed versions rejected", () => Done(() => { foreach (string? value in new[] { "1.2", "01.2.3", "1.2.3-01", "1.2.3-", "../1.2.3", "1.2.3\n", null }) Throws(() => SemanticVersion.Parse(value)); }));
+await Test("Installer assets coexist without changing the verified ZIP update channel", () => Done(() =>
+{
+    using var f = new Fixture(); var node = System.Text.Json.Nodes.JsonNode.Parse(f.Json())!; var assets = node["assets"]!.AsArray();
+    foreach (string suffix in new[] { ".exe", ".exe.sha256" })
+    {
+        var asset = assets[0]!.DeepClone(); string name = "ClickForge-Setup-v1.2.0" + suffix; asset["name"] = name;
+        asset["browser_download_url"] = "https://github.com/ojeshfrrr/ClickForge/releases/download/v1.2.0/" + name; assets.Add(asset);
+    }
+    var parsed = UpdateClient.ParseRelease(node.ToJsonString()); Check(parsed.Archive.Name == Fixture.Name && parsed.Checksum.Name == Fixture.Name + ".sha256");
+}));
 await Test("Installed assembly metadata is readable", () => Done(() => Check(SemanticVersion.Installed(typeof(Settings).Assembly).Prerelease is null)));
 await Test("New stable release available with published notes", async () => { using var f = new Fixture(); using var c = f.Client(); await c.CheckAsync(installed); Check(c.Status.State == UpdateState.Available && c.Latest!.Notes == "Actual release notes"); });
 await Test("Same version and older release are not updates", async () => { using var f = new Fixture(); using var c = f.Client(); await c.CheckAsync(SemanticVersion.Parse("1.2.0+local")); Check(c.Status.State == UpdateState.UpToDate); await c.CheckAsync(SemanticVersion.Parse("2.0.0")); Check(c.Status.State == UpdateState.UpToDate); });
@@ -57,6 +67,16 @@ await Test("Duplicate download requests are prevented", async () => { using var 
 await Test("Interrupted backup corruption requires recovery instead of false success", async () => { using var f = new Fixture(); var r = f.Prepare(); var files = UpdatePackage.Payload; var hashes = new Dictionary<string,string>(); foreach (string name in files) { string dest = Path.Combine(r.Workspace,"backup",name); Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(Path.Combine(f.Install,name),dest); hashes[name] = UpdatePackage.Hash(dest); } UpdateFiles.WriteJson(Path.Combine(r.Workspace,"journal.json"), new InstallJournal(f.Install,files,"Replacing",hashes)); File.WriteAllText(Path.Combine(r.Workspace,"backup","ClickForge.exe"),"damaged backup"); Check(!await new UpdateInstaller(new Platform(),f.Updates,f.Package).InstallAsync(r,true)); Check(UpdateFiles.ReadJson<InstallReceipt>(Path.Combine(r.Workspace,"result.json")).Status == "RecoveryRequired"); Check(Directory.Exists(Path.Combine(r.Workspace,"backup"))); });
 await Test("Old successful caches cleaned; failed recovery retained", () => Done(() => { using var f = new Fixture(); string completed = Path.Combine(f.Updates,Guid.NewGuid().ToString("N")), failed = Path.Combine(f.Updates,Guid.NewGuid().ToString("N")); foreach (string dir in new[] { completed,failed }) { Directory.CreateDirectory(dir); UpdateFiles.WriteJson(Path.Combine(dir,"result.json"), new InstallReceipt(new string('a',64),"1.2.0",Path.Combine(f.Install,"ClickForge.exe"),dir == completed ? "Succeeded" : "Failed","test")); Directory.SetLastWriteTimeUtc(dir,DateTime.UtcNow.AddDays(-10)); } UpdateCache.CleanupCompleted(f.Updates); Check(!Directory.Exists(completed) && Directory.Exists(failed)); }));
 await Test("Co-modified stage and manifest cannot bypass original archive", () => Done(() => { using var f = new Fixture(); var r = f.Prepare(); string stage = Path.Combine(r.Workspace,"staging"), manifestPath = Path.Combine(stage,"update-manifest.json"); var m = UpdateFiles.ReadJson<PackageManifest>(manifestPath); File.WriteAllText(Path.Combine(stage,"README.txt"),"changed stage"); m.Files["README.txt"] = UpdatePackage.Hash(Path.Combine(stage,"README.txt")); UpdateFiles.WriteJson(manifestPath,m); Throws(() => f.Package.VerifyStagingFromArchive(Path.Combine(r.Workspace,"package.zip"),stage,SemanticVersion.Parse("1.2.0"))); }));
+await Test("Successful install and rollback preserve profile files alongside preferences", async () =>
+{
+    foreach (bool failure in new[] { false, true })
+    {
+        using var f = new Fixture(); string profiles = Path.Combine(f.Install, "Profiles"); Directory.CreateDirectory(profiles);
+        var saved = new TimingProfile { Name = "User-owned profile" }; string path = Path.Combine(profiles, saved.Id.ToString("N") + ".json"); ProfileStore.Export(path, saved); string hash = UpdatePackage.Hash(path);
+        var platform = new Platform(); bool result = await new UpdateInstaller(platform, f.Updates, f.Package, failure ? _ => throw new IOException("simulated failure") : null).InstallAsync(f.Prepare());
+        Check(result != failure && UpdatePackage.Hash(path) == hash && ProfileStore.Read(path) == saved && File.ReadAllText(Path.Combine(f.Install, "settings.json")) == "private settings");
+    }
+});
 Console.WriteLine($"RESULT {passed} passed; {failed} failed");
 return failed == 0 ? 0 : 1;
 
