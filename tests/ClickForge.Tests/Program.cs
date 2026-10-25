@@ -70,6 +70,7 @@ Test("Verified selected target supports variable CPS and still pauses on focus l
 Test("Production variable settings persist without activation or target identity", () => { string dir = Path.Combine("artifacts", "variable-settings-" + Guid.NewGuid()); string path = Path.Combine(dir, "settings.json"); try { var store = new SettingsService(path); var s = new Settings { TimingMode = ClickTimingMode.Variable, MinimumCps = 1, MaximumCps = 50 }; store.Save(s); Check(store.Load() == s); string json = File.ReadAllText(path); Check(!json.Contains("Handle") && !json.Contains("Enabled")); File.WriteAllText(path, "{\"TimingMode\":1,\"MinimumCps\":30,\"MaximumCps\":5}"); Check(store.Load().TimingMode == ClickTimingMode.Fixed && store.Load().MinimumCps == 5); File.WriteAllText(path, "{\"Cps\":19}"); Check(store.Load().Cps == 19 && store.Load().MaximumCps == 20); } finally { Directory.Delete(dir, true); } });
 ProfileTests.Run(Test);
 SessionTargetTests.Run(Test);
+ButtonTests.Run(Test);
 Console.WriteLine($"RESULT {passed} passed; {failed} failed");
 return failed == 0 ? 0 : 1;
 
