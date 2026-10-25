@@ -1,14 +1,22 @@
 # ClickForge
 
-A native, dark-mode Windows left-click utility built with C# and WPF. Includes fixed and variable CPS, global shortcuts, foreground restrictions, in-app updates and an isolated logical timing simulator. The local **v1.2.0 candidate** adds Windows Setup, configuration profiles, an optional system tray workflow, accessible controls, and redacted diagnostics. It has not been published.
+A native Windows mouse-click and key-repeat utility built with C# and WPF. **v1.3.0** includes Fixed/Variable CPS, mouse/keyboard output, global keyboard/mouse shortcuts, session statistics, foreground restrictions, profiles, an optional system tray workflow and in-app updates. See the [release notes](docs/RELEASE-v1.3.0.md).
 
-The candidate uses an obsidian-and-champagne interface with responsive navigation and a genuine target/profile inspector. See the [redesign, complete change list and verification report](docs/OBSIDIAN-REDESIGN.md).
+The application uses an obsidian-and-champagne interface with responsive navigation and a genuine target/profile inspector. See the [redesign, complete change list and verification report](docs/OBSIDIAN-REDESIGN.md).
 
 ![ClickForge application](docs/screenshot.png)
 
+The dashboard also shows current-session wall-clock elapsed time (including pauses and target waits), input pairs sent, and measured average CPS. Stop freezes these values; a new explicit activation resets them. Target explanations report the actual blocking check. These statistics remain in memory and do not imply the target accepted input. See [session statistics and target status](docs/SESSION-STATISTICS.md).
+
+Choose **Left**, **Mouse 4 (Back)** or **Mouse 5 (Forward)** beside Click speed. Left remains the default. Changing the button stops input and requires explicit activation; settings and profiles remember it. Open **Safe click test → Fixed CPS** to select a button and inspect down/up events received by the controlled pad. Unsupported or blocked input stops with an error and never falls back to Left. See [button behavior and verification](docs/MOUSE-BUTTONS.md).
+
+Choose **Custom input key…** in that same dropdown to record a single keyboard key. Press the key, choose **Use key**, then activate explicitly to repeat it at the configured CPS. **Change: key** opens the recorder again. The choice persists in settings/profiles; keys conflicting with Activate, Pause or Emergency stop are rejected. See [custom key behavior and tests](docs/CUSTOM-INPUT-KEY.md).
+
+**Mouse 4 (Back)** and **Mouse 5 (Forward)** are also available in each **Global shortcuts** dropdown for Activate, Pause and Emergency stop. Select a shortcut and click **Apply shortcuts**. Mouse shortcuts work in Toggle and Hold mode; generated mouse clicks are ignored by the shortcut listener. For Hold, use a different click-output button from the mouse activation shortcut. F6/F7/F8 remain the defaults. See [mouse hotkeys and verification](docs/MOUSE-HOTKEYS.md).
+
 ## Download and run
 
-There are two distribution choices. The installer is included in the local v1.2.0 candidate; public v1.1.2 remains ZIP-only until a separate release is authorized.
+Two distribution choices are available from the [latest release](https://github.com/ojeshfrrr/ClickForge/releases/latest): Windows Setup and a portable ZIP.
 
 **Recommended: Windows installer**
 
@@ -41,13 +49,13 @@ Keep `ClickForge.Updater.exe` beside `ClickForge.exe`. The independent helper wa
 
 The existing **v1.0.0 needs one manual bootstrap download**, because that executable did not contain update code. Only a newly published matching version tag produces an update; a main-branch push does not. See [the complete updating/recovery guide](docs/UPDATING.md) for exact version/tag commands, package contents, workflow behavior and verification limits. SHA-256 is integrity checking, not a digital publisher signature.
 
-## Profiles, tray and everyday use (v1.2.0 candidate)
+## Profiles, tray and everyday use
 
-Open **Profiles** in the navigation rail to create a named configuration from the current timing controls. Select a profile to review its summary, then **Apply profile**. Application stops the current request, leaves the selected target unchanged, and requires explicit activation. Profiles remember Fixed/Variable CPS, the fixed rate, minimum/maximum rates and Toggle/Hold activation. Shortcuts and target restrictions remain application preferences. The header identifies the applied profile and shows **modified** after timing edits.
+Open **Profiles** in the navigation rail to create a named configuration from the current timing controls. Select a profile to review its summary, then **Apply profile**. Application stops the current request, leaves the selected target unchanged, and requires explicit activation. Profiles remember Fixed/Variable CPS, the fixed rate, minimum/maximum rates, Toggle/Hold activation, and the selected mouse/custom-key output. Shortcuts and target restrictions remain application preferences. The header identifies the applied profile and shows **modified** after timing edits.
 
 The profile manager supports rename, description, saving current timing into an existing profile, duplicate, confirmed delete, import/export, and restoring the two built-in profiles. Import creates an independent copy and never applies it automatically. Deleting the active profile keeps the current timing configuration and stops input. Restoring application defaults keeps saved profile files.
 
-Profiles use separate versioned JSON files in `%LOCALAPPDATA%/ClickForge/Profiles/<id>.json`; preferences remain in `settings.json`. A malformed profile is skipped while other valid profiles remain available. Writes use per-path locks, flushed temporary files and atomic replacement. Imports are limited to 16 KiB, 100 stored profiles, 80-character names and 500-character descriptions. Unknown fields, duplicate properties, invalid rates/enums, unsupported versions, scripts, target identities and safety overrides are rejected. See [the JSON format and candidate verification report](docs/V1.2.0.md).
+Profiles use separate versioned JSON files in `%LOCALAPPDATA%/ClickForge/Profiles/<id>.json`; preferences remain in `settings.json`. A malformed profile is skipped while other valid profiles remain available. Writes use per-path locks, flushed temporary files and atomic replacement. Imports are limited to 16 KiB, 100 stored profiles, 80-character names and 500-character descriptions. Unknown fields, duplicate properties, invalid rates/enums, unsupported versions, scripts, target identities and safety overrides are rejected. See [the JSON format and implementation verification report](docs/V1.2.0.md).
 
 ClickForge registers one real Windows notification-area icon. Its menu opens the existing window, routes Start/Stop and Pause/Resume through the normal controls, provides Emergency Stop, and opens Profiles, Updates and Settings. **Exit ClickForge** performs full cleanup. A second ordinary launch restores the existing instance. The tray tooltip reports actual engine state, including waiting for a target. Windows may place the icon in its overflow area.
 
@@ -55,7 +63,7 @@ ClickForge registers one real Windows notification-area icon. Its menu opens the
 
 Settings includes current version, Windows version, engine/timing state, shortcut status, update state and a bounded in-memory activity history. Copy or export a redacted report for troubleshooting; it omits profile names, target identities and local paths. History retains at most 100 meaningful events, never individual clicks, and can be cleared. It is not written to disk unless explicitly exported.
 
-Controls expose accessible labels, visible keyboard focus, ordinary Tab/Shift+Tab navigation and polite state announcements. Profile dialogs support Escape without applying pending edits. Expand **Global shortcuts** to change key assignments; the main action row always shows the active shortcuts. There are no animated transitions, so reduced-motion settings need no animation suppression. Smaller windows scroll intentionally. Native display scaling and screen-reader verification limits are recorded in the candidate report.
+Controls expose accessible labels, visible keyboard focus, ordinary Tab/Shift+Tab navigation and polite state announcements. Profile dialogs support Escape without applying pending edits. Expand **Global shortcuts** to change key assignments; the main action row always shows the active shortcuts. There are no animated transitions, so reduced-motion settings need no animation suppression. Smaller windows scroll intentionally. Native display scaling and screen-reader verification limits are recorded in the implementation reports.
 
 ## Features and controls
 
