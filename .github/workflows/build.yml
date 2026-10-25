@@ -55,6 +55,21 @@ jobs:
       - name: Verify the independent helper with disposable processes
         shell: pwsh
         run: ./scripts/Test-UpdateProcess.ps1 -PayloadDirectory artifacts/package
+      - name: Verify real per-user installation, upgrade, shortcuts and uninstall
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Version.props -Raw)).Project.PropertyGroup.ClickForgeVersion
+          ./scripts/Test-Installer.ps1 -ZipPath "artifacts/ClickForge-v$version-win-x64.zip"
+      - name: Preserve installer and helper diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-diagnostics
+          path: |
+            artifacts/installer-tests/**/results.txt
+            artifacts/installer-tests/**/installed-ui-tests.txt
+            artifacts/updater/logs/
+          if-no-files-found: ignore
       - name: Upload draft, verify assets, then publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -64,17 +79,23 @@ jobs:
           $version = $tag.Substring(1)
           $name = "ClickForge-v$version-win-x64.zip"
           $zip = "artifacts/$name"
+          $setupName = "ClickForge-Setup-v$version.exe"
+          $setup = "artifacts/$setupName"
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $setupHash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
           $generated = gh api "repos/$env:GITHUB_REPOSITORY/releases/generate-notes" -X POST -f "tag_name=$tag" -f "target_commitish=$env:GITHUB_SHA" | ConvertFrom-Json
           if ($LASTEXITCODE) { throw 'Release notes generation failed' }
-          $notes = "Portable Windows x64. Extract the entire ZIP and keep the helper next to ClickForge.exe. See docs/UPDATING.md. All build/test jobs passed; ZIP contents and versions validated. Unsigned release; SHA-256 is not publisher authentication. Experience rules may prohibit autoclickers. Source: $env:GITHUB_SHA`n`nSHA-256: $hash  $name`n`n" + $generated.body
+          $notes = "Windows x64. Recommended: run $setupName for a per-user installation with optional Desktop and Start menu shortcuts. Portable: extract $name and keep the helper next to ClickForge.exe. See docs/INSTALLING.md and docs/UPDATING.md. Build/test, installer lifecycle and package verification jobs passed. Unsigned release; SHA-256 is not publisher authentication. Source: $env:GITHUB_SHA`n`nSHA-256: $hash  $name`nSHA-256: $setupHash  $setupName`n`n" + $generated.body
           [IO.File]::WriteAllText('artifacts/release-notes.md', $notes)
-          gh release create $tag $zip "$zip.sha256" --repo $env:GITHUB_REPOSITORY --verify-tag --target $env:GITHUB_SHA --draft --title "ClickForge $tag" --notes-file artifacts/release-notes.md
+          gh release create $tag $zip "$zip.sha256" $setup "$setup.sha256" --repo $env:GITHUB_REPOSITORY --verify-tag --target $env:GITHUB_SHA --draft --title "ClickForge $tag" --notes-file artifacts/release-notes.md
           if ($LASTEXITCODE) { throw 'Draft upload failed; inspect it before retrying' }
           $release = gh release view $tag --repo $env:GITHUB_REPOSITORY --json assets | ConvertFrom-Json
           if ($LASTEXITCODE) { throw 'Cannot verify uploaded assets' }
-          $asset = @($release.assets | Where-Object name -eq $name)
-          $checksum = @($release.assets | Where-Object name -eq "$name.sha256")
-          if ($asset.Count -ne 1 -or $checksum.Count -ne 1 -or $asset[0].state -ne 'uploaded' -or $checksum[0].state -ne 'uploaded' -or $asset[0].size -ne (Get-Item $zip).Length -or $asset[0].digest -cne "sha256:$hash" -or $checksum[0].size -ne (Get-Item "$zip.sha256").Length -or $checksum[0].digest -cne ('sha256:' + (Get-FileHash "$zip.sha256" -Algorithm SHA256).Hash.ToLowerInvariant())) { throw 'Assets failed verification; draft not published' }
+          foreach ($path in @($zip, "$zip.sha256", $setup, "$setup.sha256")) {
+            $assetName = [IO.Path]::GetFileName($path)
+            $asset = @($release.assets | Where-Object name -eq $assetName)
+            $expectedHash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($asset.Count -ne 1 -or $asset[0].state -ne 'uploaded' -or $asset[0].size -ne (Get-Item $path).Length -or $asset[0].digest -cne "sha256:$expectedHash") { throw "Asset failed verification: $assetName; draft not published" }
+          }
           gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false --latest
           if ($LASTEXITCODE) { throw 'Release publication failed' }
