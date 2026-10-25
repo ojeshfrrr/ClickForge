@@ -52,6 +52,11 @@ Some Roblox experiences prohibit autoclickers and may enforce account penalties.
 Open Updates to check for a stable release, download/verify it, and confirm
 installation/restart. Startup checks are optional and never install silently.
 Settings remain in %LOCALAPPDATA%/ClickForge/settings.json.
+Timing profiles remain separately in %LOCALAPPDATA%/ClickForge/Profiles.
+Open Profiles to create, apply, import or export a version 1 JSON profile.
+Applying profiles stops input and never changes the selected target.
+Settings includes opt-in minimize/close to tray and redacted diagnostics.
+Both tray preferences default off; hiding stops clicking. Tray Exit quits.
 An interrupted update retains a recovery journal and backup under that folder's
 Updates subdirectory. See docs/UPDATING.md in the source repository for recovery.
 A checksum from the release account is not a digital publisher signature.
@@ -85,3 +90,4 @@ dotnet run --project tests/ClickForge.UpdateTests -c Release -- --verify-package
 if ($LASTEXITCODE) { throw 'Package validation failed' }
 Write-Output "Package: $zip"
 Write-Output "SHA-256: $hash"
+& ./scripts/Build-Installer.ps1 -ZipPath $zip -OutputDirectory (Split-Path $output -Parent) -Strict:$Strict
