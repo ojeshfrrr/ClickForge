@@ -8,13 +8,41 @@ public partial class MainWindow
 {
     private readonly DesktopTargetService desktopTarget = new();
     private bool synchronizingVariable;
+    private bool synchronizingOutput;
+    private CustomKeyWindow? customKeyWindow;
     private void LoadTimingControls()
     {
+        SynchronizeOutputControls(); engine.ConfigureOutput(settings.Button,settings.CustomKey);
         FixedTimingInput.IsChecked = settings.TimingMode == ClickTimingMode.Fixed;
         VariableTimingInput.IsChecked = settings.TimingMode == ClickTimingMode.Variable;
         SynchronizeRange();
         engine.ConfigureTiming(settings.TimingMode, new(settings.MinimumCps, settings.MaximumCps));
         RenderTimingMode();
+    }
+    private void ClickButtonChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ready || synchronizingOutput || ClickButtonInput.SelectedIndex < 0) return;
+        engine.Stop(); activeTest?.StopTest();
+        var button = (ClickButton)ClickButtonInput.SelectedIndex;
+        if(button==ClickButton.CustomKey){ChooseCustomKey();return;}
+        ClickButtons.Validate(button); engine.ConfigureOutput(button,settings.CustomKey); settings = settings with { Button = button };
+        SynchronizeOutputControls(); Persist(); lastDisplay = null; UpdateStatus(); MessageText.Text = ClickButtons.Label(button) + " selected. Clicking remains stopped.";
+    }
+    private void SynchronizeOutputControls()
+    {
+        synchronizingOutput=true;
+        try { ClickButtonInput.SelectedIndex=(int)settings.Button; ChangeCustomKeyButton.Visibility=settings.Button==ClickButton.CustomKey?Visibility.Visible:Visibility.Collapsed;ChangeCustomKeyButton.Content="Change: "+KeyboardOutput.Label(settings.CustomKey);ClickButtonInput.ToolTip=ClickButtons.OutputLabel(settings.Button,settings.CustomKey);OutputRateHelp.Text=settings.Button==ClickButton.CustomKey?"Set how many key presses to send per second.":"Set how many clicks to send per second."; }
+        finally{synchronizingOutput=false;}
+    }
+    private void ChangeCustomKeyClicked(object sender,RoutedEventArgs e)=>ChooseCustomKey();
+    private void ChooseCustomKey()
+    {
+        if(customKeyWindow is not null)return;
+        engine.Stop();activeTest?.StopTest();
+        customKeyWindow=new(key=>{try{(settings with{Button=ClickButton.CustomKey,CustomKey=key}).Validate();return null;}catch(ArgumentException ex){return ex.Message;}}){Owner=this};
+        try { if(customKeyWindow.ShowDialog()==true) { var key=customKeyWindow.ChosenKey; var candidate=settings with{Button=ClickButton.CustomKey,CustomKey=key};candidate.Validate();engine.ConfigureOutput(candidate.Button,key);settings=candidate;Persist();MessageText.Text="Custom input: "+KeyboardOutput.Label(key)+". Starts disabled."; } }
+        catch(ArgumentException ex){MessageText.Text=ex.Message;}
+        finally{customKeyWindow=null;SynchronizeOutputControls();lastDisplay=null;UpdateStatus();}
     }
     private void RenderTimingMode()
     {
@@ -97,6 +125,9 @@ public partial class MainWindow
     }
     private void StartValidated()
     {
+        if(customKeyWindow?.IsVisible==true){engine.Stop();MessageText.Text="Finish choosing the custom input key before activation.";return;}
+        try{settings.Validate();}catch(ArgumentException ex){engine.Stop();MessageText.Text=ex.Message;return;}
+        if (ShortcutKeys.ConflictsWithHoldOutput(settings)) { engine.Stop(); MessageText.Text = "Hold mode requires a different click-output button from the mouse activation shortcut. Choose Left output, another side button, or Toggle mode."; return; }
         if (profilesWindow?.IsVisible == true || preferencesWindow?.IsVisible == true || targetWindow?.IsVisible == true) { engine.Stop(); MessageText.Text = "Close Profiles, Settings and Target before activating clicking."; return; }
         if (settings.TimingMode == ClickTimingMode.Variable && !TryRange(out _)) { engine.Stop(); MessageText.Text = VariableValidationText.Text; return; }
         try { engine.Start(); history.Add(ActivityKind.Started); }

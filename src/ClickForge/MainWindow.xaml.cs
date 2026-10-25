@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly ClickEngine engine;
     private Settings settings;
     private HotkeyBindings? bindings;
+    private GlobalHotkeyService? globalShortcuts;
     private HwndSource? source;
     private readonly DispatcherTimer refresh = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private bool ready, shortcutsReady, closing;
@@ -46,8 +47,9 @@ public partial class MainWindow : Window
         if (settings.LayoutVersion < 3) settings = settings with { Width = 1280, Height = 920, LayoutVersion = 3 };
         engine = selfTestPath is null ? new(new MouseInputService(), target, desktopTarget) : new(new DiagnosticMouse(), new DiagnosticTarget());
         InitializeComponent();
+        foreach (var button in Enum.GetValues<ClickButton>()) ClickButtonInput.Items.Add(ClickButtons.Label(button));
         InitializeUpdates();
-        foreach (var combo in new[] { ActivateInput, PauseInput, StopInput }) for (int i = 1; i <= 11; i++) combo.Items.Add("F" + i);
+        foreach (var combo in new[] { ActivateInput, PauseInput, StopInput }) foreach (int key in ShortcutKeys.Choices) combo.Items.Add(ShortcutKeys.Label(key));
         LoadControls();
         MessageText.Text = store.Warning ?? "Starts disabled. Clicks are sent at the current pointer.";
         InitializeDaily();
@@ -59,13 +61,13 @@ public partial class MainWindow : Window
             if (previewPath is not null || (selfTestPath is not null && !interactiveTest)) { shortcutsReady = true; return; }
             source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             source.AddHook(WindowMessage);
-            bindings = new(new GlobalHotkeyService(source.Handle));
+            globalShortcuts = new(source.Handle); bindings = new(globalShortcuts);
             RegisterShortcuts(); InitializeTray();
             if (shortcutsReady && store.Warning is not null) MessageText.Text = store.Warning;
             else if (shortcutsReady && profiles.Warnings.Count > 0) MessageText.Text = string.Join(" ", profiles.Warnings.Distinct());
         };
         engine.ActivationStillValid = () => settings.Mode != ActivationMode.Hold ||
-            ((Native.GetAsyncKeyState(settings.ActivateKey) & 0x8000) != 0 && Native.GetForegroundWindow() == holdWindow);
+            ((ShortcutKeys.IsMouse(settings.ActivateKey) ? globalShortcuts?.IsHeld(settings.ActivateKey) == true : (Native.GetAsyncKeyState(settings.ActivateKey) & 0x8000) != 0) && Native.GetForegroundWindow() == holdWindow);
         refresh.Tick += (_, _) => UpdateStatus(); refresh.Start();
         Closing += OnClosing;
         ContentRendered += (_, _) =>
@@ -94,9 +96,9 @@ public partial class MainWindow : Window
         ToggleModeInput.IsChecked = settings.Mode == ActivationMode.Toggle;
         HoldModeInput.IsChecked = settings.Mode == ActivationMode.Hold;
         RestrictInput.IsChecked = settings.RobloxOnly;
-        ActivateInput.SelectedIndex = settings.ActivateKey - 0x70;
-        PauseInput.SelectedIndex = settings.PauseKey - 0x70;
-        StopInput.SelectedIndex = settings.StopKey - 0x70;
+        ActivateInput.SelectedItem = ShortcutKeys.Label(settings.ActivateKey);
+        PauseInput.SelectedItem = ShortcutKeys.Label(settings.PauseKey);
+        StopInput.SelectedItem = ShortcutKeys.Label(settings.StopKey);
         engine.Cps = settings.Cps; target.Restricted = settings.RobloxOnly;
         UpdateSpeedLabel(); LoadTimingControls(); ready = true;
     }
@@ -108,14 +110,20 @@ public partial class MainWindow : Window
     private void RegisterShortcuts()
     {
         engine.Stop(); shortcutsReady = false;
-        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = "Shortcuts ready. F1–F11 are supported."; }
+        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = "Shortcuts ready. F1–F11 and Mouse 4/5 are supported."; }
         catch (Exception e) { MessageText.Text = e.Message + " Clicking is disabled until shortcuts are available."; }
-        StartKeyText.Text = $"F{settings.ActivateKey - 0x6F}";
-        PauseKeyText.Text = $"F{settings.PauseKey - 0x6F}";
-        StopKeyText.Text = $"F{settings.StopKey - 0x6F}";
+        StartKeyText.Text = ShortcutBadge(settings.ActivateKey); StartKeyText.ToolTip = ShortcutKeys.Label(settings.ActivateKey);
+        PauseKeyText.Text = ShortcutBadge(settings.PauseKey); PauseKeyText.ToolTip = ShortcutKeys.Label(settings.PauseKey);
+        StopKeyText.Text = ShortcutBadge(settings.StopKey); StopKeyText.ToolTip = ShortcutKeys.Label(settings.StopKey);
     }
+    private static string ShortcutBadge(int key) => key switch { 5 => "M4", 6 => "M5", _ => ShortcutKeys.Label(key) };
     private nint WindowMessage(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
     {
+        if (msg == GlobalHotkeyService.MouseMessage)
+        {
+            if (globalShortcuts?.AcceptMouseMessage((int)wParam,lParam) != true) { handled = true; return 0; }
+            msg = 0x0312;
+        }
         if (msg == 0x0312)
         {
             if ((int)wParam == 3) { EmergencyClicked(this, new()); }
@@ -173,16 +181,17 @@ public partial class MainWindow : Window
     private void ApplyClicked(object sender, RoutedEventArgs e)
     {
         engine.Stop();
-        var candidate = settings with { ActivateKey = 0x70 + ActivateInput.SelectedIndex, PauseKey = 0x70 + PauseInput.SelectedIndex, StopKey = 0x70 + StopInput.SelectedIndex };
+        int SelectedKey(ComboBox combo) => combo.SelectedIndex >= 0 && combo.SelectedIndex < ShortcutKeys.Choices.Count ? ShortcutKeys.Choices[combo.SelectedIndex] : 0;
+        var candidate = settings with { ActivateKey = SelectedKey(ActivateInput), PauseKey = SelectedKey(PauseInput), StopKey = SelectedKey(StopInput) };
         try { candidate.Validate(); }
         catch (ArgumentException ex) { MessageText.Text = ex.Message; return; }
         settings = candidate; RegisterShortcuts(); if (shortcutsReady) Persist(); UpdateStatus();
     }
-    private void ResetClicked(object sender, RoutedEventArgs e) { engine.Stop(); settings = settings with { ActivateKey = 0x75, PauseKey = 0x76, StopKey = 0x77 }; LoadControls(); RegisterShortcuts(); Persist(); UpdateStatus(); }
+    private void ResetClicked(object sender, RoutedEventArgs e) { engine.Stop(); var candidate=settings with { ActivateKey = 0x75, PauseKey = 0x76, StopKey = 0x77 }; try{candidate.Validate();}catch(ArgumentException ex){MessageText.Text=ex.Message;return;} settings=candidate;LoadControls(); RegisterShortcuts(); Persist(); UpdateStatus(); }
     private void TestClicked(object sender, RoutedEventArgs e)
     {
         engine.Stop();
-        activeTest = new TestWindow((SafeTestMode)SafeTestModeInput.SelectedIndex) { Owner = this };
+        activeTest = new TestWindow((SafeTestMode)SafeTestModeInput.SelectedIndex, settings.Button,settings.CustomKey) { Owner = this };
         try { activeTest.ShowDialog(); }
         finally { activeTest = null; engine.Stop(); }
     }
@@ -204,13 +213,13 @@ public partial class MainWindow : Window
         TargetText.Text = !settings.RobloxOnly ? "Restriction off · any application" : foreground ? "Roblox is in focus" : "Waiting for Roblox to be in focus";
         StateHintText.Text = engine.State == EngineState.Error ? "Input stopped safely" : engine.IsPaused ? "Paused by you" : active && engine.State != EngineState.Running ? "Waiting for target" : active ? "Sending input pairs" : "Ready to start";
         CycleText.Text = displayedClicks.ToString("N0"); ConfiguredCpsText.Text = settings.Cps.ToString();
-        StartLabel.Text = active ? "Stop clicking" : settings.Mode == ActivationMode.Hold ? "Hold to click" : "Start clicking";
+        StartLabel.Text = settings.Button==ClickButton.CustomKey ? active?"Stop input":settings.Mode==ActivationMode.Hold?"Hold to repeat":"Start input" : active ? "Stop clicking" : settings.Mode == ActivationMode.Hold ? "Hold to click" : "Start clicking";
         StartIcon.Text = active ? "■" : "▶";
         StartButton.IsEnabled = shortcutsReady && (settings.Mode == ActivationMode.Toggle || active);
         PauseLabel.Text = engine.IsPaused ? "Resume" : "Pause"; PauseButton.IsEnabled = active;
         PauseButton.ToolTip = active ? "Pause or resume the active request" : "Start clicking before using pause";
-        StartButton.ToolTip = !shortcutsReady ? "Apply available, nonconflicting shortcuts to enable clicking" : settings.Mode == ActivationMode.Hold && !active ? $"Hold F{settings.ActivateKey - 0x6F} to activate. Release the key or change focus to stop." : "Start or stop the request. Roblox-only mode waits for a verified foreground client.";
-        ModeHelp.Text = settings.Mode == ActivationMode.Hold ? $"Hold F{settings.ActivateKey - 0x6F} to click. Release or change focus to stop." : $"Press F{settings.ActivateKey - 0x6F} once to start, again to stop.";
+        StartButton.ToolTip = !shortcutsReady ? "Apply available, nonconflicting shortcuts to enable clicking" : settings.Mode == ActivationMode.Hold && !active ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to activate. Release it or change focus to stop." : "Start or stop the request. Roblox-only mode waits for a verified foreground client.";
+        ModeHelp.Text = ShortcutKeys.ConflictsWithHoldOutput(settings) ? "Hold activation requires a different click-output button." : settings.Mode == ActivationMode.Hold ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to click. Release or change focus to stop." : $"Press {ShortcutKeys.Label(settings.ActivateKey)} once to start, again to stop.";
         RenderVariableStatus(); UpdateDailyStatus();
         if (engine.Error is { } error) MessageText.Text = error;
     }
@@ -219,7 +228,7 @@ public partial class MainWindow : Window
         if (selfTestPath is not null) File.AppendAllText(selfTestPath, "WPF closing" + Environment.NewLine);
         if (closing) return;
         if (!exitRequested && previewPath is null && settings.CloseToTray && CanHideToTray) { e.Cancel = true; HideToTray(); return; }
-        closing = true; targetWindow?.Close(); tray?.Dispose(); tray = null; profilesWindow?.Close(); preferencesWindow?.Close(); updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
+        closing = true; customKeyWindow?.Close(); targetWindow?.Close(); tray?.Dispose(); tray = null; profilesWindow?.Close(); preferencesWindow?.Close(); updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
         if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 3 }; Persist(); }
     }
     private void LayoutChanged(object sender, SizeChangedEventArgs e)

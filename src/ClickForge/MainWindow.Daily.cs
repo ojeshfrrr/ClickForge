@@ -90,7 +90,7 @@ public partial class MainWindow
             case TrayCommand.Exit: ExitApplication(); break;
         }
     }
-    private string EffectiveState => engine.State == EngineState.Paused && !engine.IsPaused && engine.Enabled ? "Waiting for target" : engine.State switch { EngineState.Running => "Clicking", EngineState.Error => "Error", EngineState.Paused => "Paused", _ => "Stopped" };
+    private string EffectiveState => engine.State == EngineState.Paused && !engine.IsPaused && engine.Enabled ? "Waiting for target" : engine.State switch { EngineState.Running => settings.Button==ClickButton.CustomKey?"Sending keys":"Clicking", EngineState.Error => "Error", EngineState.Paused => "Paused", _ => "Stopped" };
     private void UpdateDailyStatus()
     {
         if (closing) return;
@@ -103,8 +103,8 @@ public partial class MainWindow
             if (state == "Error") history.Add(ActivityKind.InputError);
             lastActivityState = state;
         }
-        tray?.Update(state, engine.Enabled, engine.IsPaused, shortcutsReady && settings.Mode == ActivationMode.Toggle && activeTest is null && profilesWindow is null && preferencesWindow is null && targetWindow is null);
-        if (!engine.Enabled && (profilesWindow?.IsVisible == true || preferencesWindow?.IsVisible == true || targetWindow?.IsVisible == true))
+        tray?.Update(state, engine.Enabled, engine.IsPaused, shortcutsReady && settings.Mode == ActivationMode.Toggle && activeTest is null && profilesWindow is null && preferencesWindow is null && targetWindow is null && customKeyWindow is null);
+        if (!engine.Enabled && (profilesWindow?.IsVisible == true || preferencesWindow?.IsVisible == true || targetWindow?.IsVisible == true || customKeyWindow?.IsVisible == true))
         { StartButton.IsEnabled = false; StartButton.ToolTip = "Close configuration views before activating clicking."; }
         else StartButton.IsEnabled = shortcutsReady && (settings.Mode == ActivationMode.Toggle || engine.Enabled);
         StatusText.Text = state;
