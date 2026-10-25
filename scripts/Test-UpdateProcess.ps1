@@ -1,9 +1,9 @@
-param([string]$PayloadDirectory = 'artifacts/updater/local-package/payload')
+param([string]$PayloadDirectory = 'artifacts/updater/local-package/payload', [string]$InstallRoot = 'artifacts/updater/process-tests')
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path $PSScriptRoot -Parent)
 $repoRoot = (Get-Location).Path
 New-Item -ItemType Directory -Force artifacts/updater/logs | Out-Null
-$payload = Join-Path $repoRoot $PayloadDirectory
+$payload = if ([IO.Path]::IsPathRooted($PayloadDirectory)) { [IO.Path]::GetFullPath($PayloadDirectory) } else { Join-Path $repoRoot $PayloadDirectory }
 if (-not (Test-Path (Join-Path $payload 'ClickForge.Updater.exe'))) { throw 'Build the local updater package first' }
  $newVersion = (Get-Content (Join-Path $payload 'update-manifest.json') -Raw | ConvertFrom-Json).Version
 foreach ($version in @('0.0.0',$newVersion)) {
@@ -17,13 +17,16 @@ $results = @()
 foreach ($failure in @($false,$true)) {
     $id = [Guid]::NewGuid().ToString('N')
     $work = Join-Path $updateRoot $id
-    $install = Join-Path $repoRoot "artifacts/updater/process-tests/$id/installed"
+    $installBase = if ([IO.Path]::IsPathRooted($InstallRoot)) { $InstallRoot } else { Join-Path $repoRoot $InstallRoot }
+    $install = Join-Path $installBase "$id/installed"
     New-Item -ItemType Directory -Force $work,$install,(Join-Path $work 'staging') | Out-Null
     Copy-Item -Path (Join-Path $payload '*') -Destination (Join-Path $work 'staging') -Recurse
     Copy-Item -LiteralPath "artifacts/updater/fixture-$newVersion/ClickForge.exe" -Destination (Join-Path $work 'staging/ClickForge.exe')
     Copy-Item -LiteralPath 'artifacts/updater/fixture-0.0.0/ClickForge.exe' -Destination (Join-Path $install 'ClickForge.exe')
     Copy-Item -LiteralPath (Join-Path $payload 'ClickForge.Updater.exe') -Destination (Join-Path $install 'ClickForge.Updater.exe')
     [IO.File]::WriteAllText((Join-Path $install 'settings.json'), 'keep-my-settings')
+    New-Item -ItemType Directory -Force (Join-Path $install 'Profiles') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $install 'Profiles/disposable.json'), 'keep-my-profiles')
     if ($failure) { [IO.File]::WriteAllText((Join-Path $install 'fail-start.marker'), 'test fixture only') }
     $manifest = Get-Content (Join-Path $work 'staging/update-manifest.json') -Raw | ConvertFrom-Json
     foreach ($file in $manifest.Files.PSObject.Properties) { $file.Value = (Get-FileHash -LiteralPath (Join-Path $work "staging/$($file.Name)") -Algorithm SHA256).Hash.ToLowerInvariant() }
@@ -57,7 +60,8 @@ foreach ($failure in @($false,$true)) {
     while (-not (Test-Path $marker) -and $wait.Elapsed.TotalSeconds -lt 5) { Start-Sleep -Milliseconds 100 }
     if (-not (Test-Path $marker)) { throw 'Expected fixture was not restarted' }
     if ([IO.File]::ReadAllText((Join-Path $install 'settings.json')) -ne 'keep-my-settings') { throw 'Settings changed' }
-    $results += "PASS real helper process: $(if ($failure) { 'failed startup rolls back and restarts previous fixture' } else { 'waits for parent, replaces files, restarts and confirms new fixture' }); settings preserved"
+    if ([IO.File]::ReadAllText((Join-Path $install 'Profiles/disposable.json')) -ne 'keep-my-profiles') { throw 'Profiles changed' }
+    $results += "PASS real helper process: $(if ($failure) { 'failed startup rolls back and restarts previous fixture' } else { 'waits for parent, replaces files, restarts and confirms new fixture' }); settings and profiles preserved"
 }
 $results | Set-Content -LiteralPath artifacts/updater/logs/process-tests.txt
 $results
