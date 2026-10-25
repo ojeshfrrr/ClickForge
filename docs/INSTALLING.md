@@ -1,6 +1,6 @@
 # Installing ClickForge
 
-The v1.2.0 candidate adds a real **Inno Setup 6.7.3** per-user Windows installer alongside the portable ZIP. No matching version tag or GitHub Release has been published. Public v1.1.2 still provides only the ZIP.
+ClickForge v1.3.0 includes an **Inno Setup 6.7.3** per-user Windows installer alongside the portable ZIP. Both distribution choices are published on the [GitHub Releases page](https://github.com/ojeshfrrr/ClickForge/releases). Older v1.1.2 releases provide only the ZIP.
 
 ## Install and launch
 
