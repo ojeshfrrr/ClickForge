@@ -71,6 +71,7 @@ Test("Production variable settings persist without activation or target identity
 ProfileTests.Run(Test);
 SessionTargetTests.Run(Test);
 ButtonTests.Run(Test);
+MouseShortcutTests.Run(Test);
 Console.WriteLine($"RESULT {passed} passed; {failed} failed");
 return failed == 0 ? 0 : 1;
 
