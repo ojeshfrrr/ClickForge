@@ -11,7 +11,8 @@ internal sealed record DesktopWindow(nint Handle, int ProcessId, long Started, s
 
 internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
 {
-    internal sealed record Inspection(string Identity, string Title, bool VerifiedRoblox, bool Valid, bool Foreground, bool PointerInside);
+    internal sealed record Inspection(string Identity, string Title, bool VerifiedRoblox, bool Valid, bool Foreground, bool PointerInside, SelectedTargetFacts Facts)
+    { public TargetStatus Status => TargetStatus.Selected(Facts); }
     internal Inspection? Snapshot
     {
         get
@@ -19,19 +20,33 @@ internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
             lock (gate)
             {
                 if (selected is null) return null;
-                bool valid = false, foreground = false, pointer = false;
+                var facts = new SelectedTargetFacts { HasSelection = true, VerifiedRoblox = selected.VerifiedRoblox };
+                string title = selected.Title;
                 try
                 {
-                    valid = SelectionValid(); foreground = valid && Native.GetForegroundWindow() == selected.Handle;
-                    pointer = valid && Native.GetCursorPos(out var point) && Native.GetAncestor(Native.WindowFromPoint(point), 2) == selected.Handle;
+                    bool alive = process is not null && !process.HasExited;
+                    bool exists = Native.IsWindow(selected.Handle);
+                    Native.GetWindowThreadProcessId(selected.Handle, out uint pid);
+                    bool pointerKnown = Native.GetCursorPos(out var point);
+                    facts = facts with { ProcessAlive = alive, WindowExists = exists, IdentityMatches = pid == selected.ProcessId,
+                        WindowVisible = Native.IsWindowVisible(selected.Handle), Minimized = Native.IsIconic(selected.Handle),
+                        Foreground = Native.GetForegroundWindow() == selected.Handle, PointerKnown = pointerKnown,
+                        PointerInside = pointerKnown && Native.GetAncestor(Native.WindowFromPoint(point), 2) == selected.Handle };
+                    title = RetainedTitle(facts, selected.Title, () => Title(selected.Handle));
+                    facts = facts with { RequiresRobloxVerification = title.Contains("roblox", StringComparison.OrdinalIgnoreCase) };
                 }
-                catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
-                return new(System.IO.Path.GetFileName(selected.Path), valid ? Title(selected.Handle) : selected.Title, selected.VerifiedRoblox, valid, foreground, pointer);
+                catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { facts = facts with { InspectionSucceeded = false }; }
+                bool valid = facts.InspectionSucceeded && facts.ProcessAlive && facts.WindowExists && facts.IdentityMatches && facts.WindowVisible && !facts.Minimized && (!facts.RequiresRobloxVerification || facts.VerifiedRoblox);
+                return new(System.IO.Path.GetFileName(selected.Path), title, selected.VerifiedRoblox, valid, valid && facts.Foreground, valid && facts.PointerInside, facts);
             }
         }
     }
     private readonly object gate = new();
+    // A reused HWND must not cause the inspector to read unrelated application metadata.
+    internal static string RetainedTitle(SelectedTargetFacts facts, string original, Func<string> readCurrent) => facts.WindowIdentityValid ? readCurrent() : original;
     private DesktopWindow? selected;
+    private bool selectionRejected;
+    public TargetStatus Status { get { lock (gate) return Snapshot?.Status ?? new(selectionRejected ? TargetBlockReason.SelectionRejected : TargetBlockReason.NoSelection); } }
     private Process? process;
     public string SelectedTitle { get { lock (gate) return selected?.Title ?? "No desktop window selected"; } }
     internal static string Title(nint window)
@@ -66,6 +81,7 @@ internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
         lock (gate)
         {
             process?.Dispose(); process = null; selected = null;
+            selectionRejected = item is not null;
             if (item is null) return;
             var current = Inspect(item.Handle, true);
             if (current is null || current.ProcessId != item.ProcessId || current.Started != item.Started || current.Path != item.Path)
@@ -75,7 +91,7 @@ internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
             {
                 _ = retained.SafeHandle; // Retain the original process object; PID reuse must not qualify.
                 if (retained.HasExited || retained.StartTime.ToUniversalTime().Ticks != item.Started) throw new InvalidOperationException("The selected application exited.");
-                selected = current; process = retained;
+                selected = current; process = retained; selectionRejected = false;
             }
             catch { retained.Dispose(); throw; }
         }

@@ -13,6 +13,17 @@ public sealed class ForegroundTargetService : ITargetGate, IDisposable
     public bool Restricted { get => restricted; set => restricted = value; }
     public bool CanClick => !restricted || RobloxForeground;
     public bool IsChecking { get { lock (gate) return checking; } }
+    public TargetStatus Status
+    {
+        get
+        {
+            nint before = Native.GetForegroundWindow();
+            bool verified = restricted && RobloxForeground;
+            nint window = Native.GetForegroundWindow();
+            verified = verified && before == window;
+            return TargetStatus.Fixed(restricted, window != 0, window != 0 && Native.IsIconic(window), IsChecking, verified);
+        }
+    }
     public bool RobloxForeground
     {
         get
