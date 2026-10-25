@@ -1,5 +1,7 @@
 # Obsidian and champagne redesign
 
+> Historical implementation-stage verification record. For the published feature summary, see [v1.3.0 release notes](RELEASE-v1.3.0.md).
+
 This v1.2.0 candidate builds on the tray/profile/usability work and public v1.1.2 baseline. The results below describe verification of the working tree before the candidate commits. No version tag or GitHub Release has been published.
 
 ## Actual application changes

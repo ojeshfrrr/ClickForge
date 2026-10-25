@@ -1,5 +1,7 @@
 # Windows installer implementation report
 
+> Historical implementation-stage verification record. For the published feature summary, see [v1.3.0 release notes](RELEASE-v1.3.0.md).
+
 ## Outcome
 
 Implemented a real **Inno Setup 6.7.3** installer alongside the existing portable ZIP. Both are built from the same verified seven-entry application payload. The v1.2.0 candidate is prepared for source review; no version tag or GitHub Release has been published. The ongoing UI/tray/profile work and existing user changes were preserved. Version.props remains 1.2.0.
