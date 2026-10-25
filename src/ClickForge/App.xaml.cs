@@ -10,6 +10,8 @@ public partial class App : Application
         // Presence, rather than ownership, is checked by Inno Setup and Uninstall.
         // Every app mode keeps the guard alive through the shutdown cleanup path.
         installationGuard = new(false, InstallationRegistration.GuardName);
+        int buttonDiagnostic = Array.IndexOf(e.Args, "--native-button-self-test");
+        if (buttonDiagnostic >= 0 && buttonDiagnostic + 1 < e.Args.Length) { base.OnStartup(e); NativeButtonDiagnostics.Run(e.Args[buttonDiagnostic + 1]); return; }
         try { InstallationRegistration.RefreshVersion(AppContext.BaseDirectory, ClickForge.MainWindow.InstalledVersion.Value.Split('+')[0]); }
         catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or System.Security.SecurityException or ArgumentException) { /* Registry display metadata cannot block startup. */ }
         int diagnosticIndex = Array.IndexOf(e.Args, "--ui-self-test");

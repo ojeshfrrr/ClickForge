@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Automation;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Input;
 using System.Windows.Threading;
 using ClickForge.Core;
 
@@ -17,6 +18,7 @@ public sealed class TestWindow : Window, ITargetGate
     private readonly Border pad = new() { Height = 150, CornerRadius = new(7), Child = new TextBlock { Text = "Fixed-CPS mouse input target", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(150) };
     internal readonly ComboBox ModeSelector = new() { Margin = new(0, 7, 0, 13) };
+    internal readonly ComboBox ButtonSelector = new() { Margin = new(0, 4, 0, 10) };
     internal readonly TextBox MinimumInput = new() { Text = "5" };
     internal readonly TextBox MaximumInput = new() { Text = "20" };
     internal readonly TextBox SeedInput = new();
@@ -28,16 +30,28 @@ public sealed class TestWindow : Window, ITargetGate
     private readonly StackPanel rangePanel = new();
     private nint handle;
     private volatile bool pointerInside;
+    private volatile bool keyboardTest, padKeyboardFocused;
+    private readonly int customKey;
+    private sealed record PadRegion(Rect Bounds);
+    private PadRegion? padRegion;
     private DateTime end;
-    private int received;
+    private int received, released;
+    private readonly Queue<string> buttonEvents = new();
     private bool initialized, started;
     internal SimulationSnapshot VariableSnapshot => simulation.Snapshot;
     internal bool FixedTestEnabled => fixedEngine?.Enabled == true;
-    public bool CanClick => pointerInside && Native.GetForegroundWindow() == handle && !Native.IsIconic(handle);
+    public bool CanClick => pointerInside && (!keyboardTest || padKeyboardFocused) && Native.GetForegroundWindow() == handle && !Native.IsIconic(handle)
+        && Native.GetCursorPos(out var point) && Volatile.Read(ref padRegion)?.Bounds.Contains(new Point(point.X, point.Y)) == true
+        && Native.GetAncestor(Native.WindowFromPoint(point), 2) == handle;
     private bool Variable => ModeSelector.SelectedIndex == (int)SafeTestMode.VariableTiming;
 
-    public TestWindow(SafeTestMode mode = SafeTestMode.FixedCps)
+    internal int ReceivedDowns => received;
+    internal int ReceivedUps => released;
+    internal Point PadCenter => pad.PointToScreen(new Point(pad.ActualWidth / 2, pad.ActualHeight / 2));
+    private ClickButton SelectedButton => (ClickButton)ButtonSelector.SelectedIndex;
+    public TestWindow(SafeTestMode mode = SafeTestMode.FixedCps, ClickButton button = ClickButton.Left, int customKey = 0)
     {
+        KeyboardOutput.ValidateOutput(button,customKey);this.customKey=customKey;
         Title = "ClickForge · Safe Click Test"; Width = 610; Height = 740; MinWidth = 520; MinHeight = 560;
         Height = Math.Min(Height, Math.Max(MinHeight, SystemParameters.WorkArea.Height - 50));
         SetResourceReference(BackgroundProperty, "Base"); SetResourceReference(IconProperty, "ForgeIcon");
@@ -48,10 +62,15 @@ public sealed class TestWindow : Window, ITargetGate
         var panel = new StackPanel { Margin = new(22) };
         panel.Children.Add(new TextBlock { Text = "Safe Click Test", FontSize = 23, FontWeight = FontWeights.SemiBold });
         panel.Children.Add(new TextBlock { Text = "Test mode", Margin = new(0, 16, 0, 0) });
-        ModeSelector.Items.Add("Fixed CPS · controlled mouse target");
+        ModeSelector.Items.Add("Fixed CPS · controlled input target");
         ModeSelector.Items.Add("Variable Timing — Safe Test Only");
         AutomationProperties.SetName(ModeSelector, "Safe test timing mode");
         panel.Children.Add(ModeSelector); panel.Children.Add(explanation);
+        panel.Children.Add(new TextBlock { Text = "Click button (controlled input test)" });
+        foreach (var choice in ClickButtons.MouseChoices) ButtonSelector.Items.Add(ClickButtons.Label(choice));
+        if(KeyboardOutput.IsValid(customKey))ButtonSelector.Items.Add(ClickButtons.OutputLabel(ClickButton.CustomKey,customKey));
+        AutomationProperties.SetName(ButtonSelector, "Safe test click button"); ButtonSelector.SelectedIndex = (int)button;
+        panel.Children.Add(ButtonSelector);
         var fields = new Grid();
         for (int i = 0; i < 3; i++) fields.ColumnDefinitions.Add(new());
         AddField(fields, 0, "Minimum CPS (5–20)", MinimumInput);
@@ -63,6 +82,7 @@ public sealed class TestWindow : Window, ITargetGate
         var actions = new Grid { Margin = new(0, 14, 0, 0) };
         actions.ColumnDefinitions.Add(new()); actions.ColumnDefinitions.Add(new());
         start.SetResourceReference(StyleProperty, "PrimaryButton");
+        start.Content=new TextBlock{Text="Start test",Foreground=(Brush)FindResource("Ink"),FontWeight=FontWeights.SemiBold};
         var stop = new Button { Content = "Stop test", Margin = new(7, 0, 0, 0) };
         stop.SetResourceReference(StyleProperty, "EmergencyButton"); Grid.SetColumn(stop, 1);
         actions.Children.Add(start); actions.Children.Add(stop); panel.Children.Add(actions);
@@ -71,7 +91,13 @@ public sealed class TestWindow : Window, ITargetGate
         start.Click += (_, _) => StartTest(); stop.Click += (_, _) => StopTest();
         pad.MouseEnter += (_, _) => pointerInside = true;
         pad.MouseLeave += (_, _) => pointerInside = false;
-        pad.MouseLeftButtonDown += (_, e) => { received++; e.Handled = true; };
+        pad.PreviewMouseDown += (_, e) => { RecordButton(e.ChangedButton, true); e.Handled = true; };
+        pad.PreviewMouseUp += (_, e) => { RecordButton(e.ChangedButton, false); e.Handled = true; };
+        pad.Focusable=true;
+        pad.GotKeyboardFocus+=(_,_)=>padKeyboardFocused=true;pad.LostKeyboardFocus+=(_,_)=>padKeyboardFocused=false;
+        pad.PreviewKeyDown+=(_,e)=>{if(SelectedButton==ClickButton.CustomKey){RecordKey(KeyInterop.VirtualKeyFromKey(e.Key==Key.System?e.SystemKey:e.Key),true);e.Handled=true;}};
+        pad.PreviewKeyUp+=(_,e)=>{if(SelectedButton==ClickButton.CustomKey){RecordKey(KeyInterop.VirtualKeyFromKey(e.Key==Key.System?e.SystemKey:e.Key),false);e.Handled=true;}};
+        ButtonSelector.SelectionChanged += (_, _) => { if (initialized) { StopTest(); received = released = 0; buttonEvents.Clear(); eventLog.Clear(); started = false; UpdateMode(); } };
         foreach (var input in new[] { MinimumInput, MaximumInput, SeedInput }) input.TextChanged += (_, _) => { if (initialized) ValidateInputs(); };
         ModeSelector.SelectionChanged += (_, _) => { if (initialized) { StopTest(); started = false; UpdateMode(); } };
         ModeSelector.SelectedIndex = (int)mode; initialized = true; UpdateMode();
@@ -81,6 +107,7 @@ public sealed class TestWindow : Window, ITargetGate
             int dark = 1; Native.DwmSetWindowAttribute(handle, 20, ref dark, sizeof(int));
         };
         Deactivated += (_, _) => StopTest();
+        LocationChanged += (_, _) => UpdatePadRegion(); SizeChanged += (_, _) => UpdatePadRegion();
         timer.Tick += (_, _) => RefreshStatus(); timer.Start();
         Closed += (_, _) => { timer.Stop(); simulation.Dispose(); fixedEngine?.Dispose(); };
     }
@@ -113,14 +140,18 @@ public sealed class TestWindow : Window, ITargetGate
     private void UpdateMode()
     {
         rangePanel.Visibility = Variable ? Visibility.Visible : Visibility.Collapsed;
-        eventLog.Visibility = Variable ? Visibility.Visible : Visibility.Collapsed;
+        eventLog.Visibility = Visibility.Visible;
+        ButtonSelector.IsEnabled = !Variable;
         pad.Visibility = Variable ? Visibility.Collapsed : Visibility.Visible;
-        explanation.Text = Variable ? "Logical simulation only. No mouse input is sent. Each run lasts up to 5 seconds. A seed repeats requested intervals; measured timing can vary." : "Existing fixed test: 2 seconds at 10 CPS. After starting, move the pointer inside the target. Mouse input is restricted to that target window.";
-        status.Text = Variable ? "Ready · logical events only" : "Ready · fixed 10 CPS target test";
+        explanation.Text = Variable ? "Logical simulation only. No mouse input is sent. Each run lasts up to 5 seconds. A seed repeats requested intervals; measured timing can vary." : "Controlled test: 2 seconds at 10 CPS using the selected button. Move the pointer inside the pad. Down and up events received here are shown below; no Roblox input is used.";
+        if(!Variable&&SelectedButton==ClickButton.CustomKey)explanation.Text="Controlled keyboard test: 2 seconds at 10 CPS. Keep the pointer and keyboard focus inside the pad. It records key down/up events; no Roblox input is used.";
+        ((TextBlock)pad.Child).Text=SelectedButton==ClickButton.CustomKey?"Keyboard test pad · "+KeyboardOutput.Label(customKey):"Fixed-CPS mouse input target";
+        status.Text = Variable ? "Ready · logical events only" : "Ready · 10 CPS · "+ClickButtons.OutputLabel(SelectedButton,customKey);
         ValidateInputs(); if (!Variable) { validation.Text = ""; start.IsEnabled = true; }
     }
     internal void StartTest()
     {
+        UpdatePadRegion();
         if (Variable)
         {
             if (!TryConfiguration(out var range, out int? seed, out string? error)) { validation.Text = error; return; }
@@ -131,7 +162,12 @@ public sealed class TestWindow : Window, ITargetGate
         else
         {
             fixedEngine ??= new(new MouseInputService(), this);
-            received = 0; end = DateTime.UtcNow.AddSeconds(2); fixedEngine.Start();
+            keyboardTest=SelectedButton==ClickButton.CustomKey;
+            if(keyboardTest)pad.Focus();
+            fixedEngine.ConfigureOutput(SelectedButton,customKey);
+            received = released = 0; buttonEvents.Clear(); eventLog.Clear(); end = DateTime.UtcNow.AddSeconds(2);
+            try { fixedEngine.Start(); }
+            catch (InvalidOperationException e) { validation.Text = e.Message; return; }
         }
         started = true; SetFieldsEnabled(false); start.IsEnabled = false; RefreshStatus();
     }
@@ -144,6 +180,7 @@ public sealed class TestWindow : Window, ITargetGate
     private void SetFieldsEnabled(bool enabled)
     {
         MinimumInput.IsEnabled = enabled; MaximumInput.IsEnabled = enabled; SeedInput.IsEnabled = enabled;
+        ButtonSelector.IsEnabled = enabled && !Variable;
     }
     private void RefreshStatus()
     {
@@ -162,9 +199,39 @@ public sealed class TestWindow : Window, ITargetGate
         else if (fixedEngine is not null)
         {
             if (DateTime.UtcNow >= end) fixedEngine.Stop();
-            status.Text = $"Configured: 10 CPS · {fixedEngine.Clicks} input pairs sent\nReceived: {received} button downs · {fixedEngine.State}";
+            status.Text = $"Configured: 10 CPS · {ClickButtons.OutputLabel(SelectedButton,customKey)} · {fixedEngine.Session.InputPairsSent} session input pairs sent\nReceived: {received} downs / {released} ups · {fixedEngine.State}";
+            eventLog.Text = string.Join("\n", buttonEvents);
             if (!fixedEngine.Enabled) { SetFieldsEnabled(true); start.IsEnabled = true; }
             if (fixedEngine.Error is not null) validation.Text = fixedEngine.Error;
         }
+    }
+    private void RecordButton(MouseButton button, bool down)
+    {
+        ClickButton? mapped = button switch { MouseButton.Left => ClickButton.Left, MouseButton.XButton1 => ClickButton.Mouse4, MouseButton.XButton2 => ClickButton.Mouse5, _ => null };
+        if (mapped != SelectedButton) return;
+        if (down) received++; else released++;
+        if (buttonEvents.Count == 12) buttonEvents.Dequeue();
+        buttonEvents.Enqueue(ClickButtons.Label(mapped.Value) + (down ? " · DOWN" : " · UP"));
+        eventLog.Text = string.Join("\n", buttonEvents);
+    }
+    internal void RecordKey(int key,bool down)
+    {
+        if(SelectedButton!=ClickButton.CustomKey || key!=customKey)return;
+        if(down)received++;else released++;
+        if(buttonEvents.Count==12)buttonEvents.Dequeue();buttonEvents.Enqueue("Key "+KeyboardOutput.Label(key)+(down?" · DOWN":" · UP"));eventLog.Text=string.Join("\n",buttonEvents);
+    }
+    internal void SendDiagnosticPair()
+    {
+        UpdatePadRegion();
+        // Explicit native diagnostic only: one bounded pair, guarded by the actual pad.
+        if (!CanClick || !pad.IsMouseOver || !Native.GetCursorPos(out var point) || Native.GetAncestor(Native.WindowFromPoint(point), 2) != handle)
+            throw new InvalidOperationException("Safe pad is not under the pointer in the foreground. No input was sent.");
+        var mouse = new MouseInputService();
+        try { mouse.Click(SelectedButton); } finally { mouse.Release(); }
+    }
+    private void UpdatePadRegion()
+    {
+        if (!IsLoaded || !pad.IsVisible) { Volatile.Write(ref padRegion, null); return; }
+        Volatile.Write(ref padRegion, new PadRegion(new Rect(pad.PointToScreen(new Point()), pad.PointToScreen(new Point(pad.ActualWidth, pad.ActualHeight)))));
     }
 }
