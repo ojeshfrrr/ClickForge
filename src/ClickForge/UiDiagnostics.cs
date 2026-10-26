@@ -12,8 +12,19 @@ namespace ClickForge;
 // It never sends mouse or keyboard input and uses its own settings file.
 public partial class MainWindow
 {
-    private sealed class DiagnosticMouse : IMouseInput { public void Click() { } public void Click(ClickButton button) { ClickButtons.Validate(button); } public bool Supports(ClickButton button) => button!=ClickButton.CustomKey&&Enum.IsDefined(button); public bool Supports(ClickButton button,int key)=>button==ClickButton.CustomKey?KeyboardOutput.IsValid(key):Supports(button);public void Click(ClickButton button,int key){KeyboardOutput.ValidateOutput(button,key);} public void Release() { } }
-    private sealed class DiagnosticTarget : ITargetGate { public bool CanClick => true; }
+    private readonly DiagnosticMouse diagnosticMouse = new();
+    private readonly DiagnosticTarget diagnosticTarget = new();
+    private sealed class DiagnosticMouse : IMouseInput
+    {
+        public volatile bool Fail;
+        public void Click() { if (Fail) throw new InvalidOperationException("Mock input failure"); }
+        public void Click(ClickButton button) { ClickButtons.Validate(button); Click(); }
+        public bool Supports(ClickButton button) => button != ClickButton.CustomKey && Enum.IsDefined(button);
+        public bool Supports(ClickButton button, int key) => button == ClickButton.CustomKey ? KeyboardOutput.IsValid(key) : Supports(button);
+        public void Click(ClickButton button, int key) { KeyboardOutput.ValidateOutput(button, key); Click(); }
+        public void Release() { }
+    }
+    private sealed class DiagnosticTarget : ITargetGate { public volatile bool Allowed = true; public bool CanClick => Allowed; }
     private async Task RunUiSelfTestAsync(string output)
     {
         var results = new List<string>();
