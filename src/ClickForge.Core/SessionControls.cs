@@ -16,3 +16,39 @@ public readonly record struct SessionLimits(int? Seconds = null, long? InputPair
 }
 
 public enum SessionEventKind { Started, Paused, Resumed, Stopped, EmergencyStop, TargetLost, TargetRestored, DurationLimit, PairLimit, ActivationEnded, InputError, ConfigurationStop, Shutdown }
+public readonly record struct SessionEvent(DateTimeOffset Time, SessionEventKind Kind)
+{
+    public string Description => Kind switch
+    {
+        SessionEventKind.Started => "Session explicitly started", SessionEventKind.Paused => "Paused by user",
+        SessionEventKind.Resumed => "Resumed by user", SessionEventKind.Stopped => "Session stopped",
+        SessionEventKind.EmergencyStop => "Emergency stop requested", SessionEventKind.TargetLost => "Target ineligible; input waiting",
+        SessionEventKind.TargetRestored => "Target eligibility restored", SessionEventKind.DurationLimit => "Wall-clock duration limit reached",
+        SessionEventKind.PairLimit => "Input-pair limit reached", SessionEventKind.ActivationEnded => "Hold activation ended",
+        SessionEventKind.InputError => "Input or validation error; stopped safely",
+        SessionEventKind.ConfigurationStop => "Configuration changed; session stopped", _ => "Application shutdown"
+    };
+    public override string ToString() => $"{Time.LocalDateTime:HH:mm:ss}  {Description}";
+}
+
+// No callbacks or per-pair logging. Records contain only time and event type.
+public sealed class SafetyTimeline
+{
+    private readonly Queue<SessionEvent> entries = new();
+    private readonly TimeProvider clock;
+    private readonly int capacity;
+    private long version;
+    public SafetyTimeline(TimeProvider? clock = null, int capacity = 100)
+    {
+        if (capacity is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(capacity));
+        this.clock = clock ?? TimeProvider.System; this.capacity = capacity;
+    }
+    public long Version { get { lock (entries) return version; } }
+    public SessionEvent[] Entries { get { lock (entries) return entries.ToArray(); } }
+    public void Record(SessionEventKind kind)
+    {
+        if (!Enum.IsDefined(kind)) throw new ArgumentException("Invalid safety event.");
+        lock (entries) { entries.Enqueue(new(clock.GetUtcNow(), kind)); while (entries.Count > capacity) entries.Dequeue(); version++; }
+    }
+    public void Clear() { lock (entries) { entries.Clear(); version++; } }
+}
