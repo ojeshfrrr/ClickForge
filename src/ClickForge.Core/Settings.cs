@@ -23,9 +23,12 @@ public sealed record Settings
     public bool MinimizeToTray { get; init; }
     public bool CloseToTray { get; init; }
     public Guid? ActiveProfileId { get; init; }
+    public int? MaximumSessionSeconds { get; init; }
+    public long? MaximumSessionPairs { get; init; }
     public void Validate()
     {
         Speed.Validate(Cps);
+        new SessionLimits(MaximumSessionSeconds, MaximumSessionPairs).Validate();
         KeyboardOutput.ValidateOutput(Button,CustomKey);
         if (!Enum.IsDefined(TimingMode)) throw new ArgumentException("Invalid click speed mode.");
         _ = new CpsRange(MinimumCps, MaximumCps);
