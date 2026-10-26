@@ -37,8 +37,7 @@ public partial class MainWindow
         using(var scope=new CustomKeyTestScope(this))
         {
             var test=scope.Window;
-            var panel=(StackPanel)((ScrollViewer)test.Content).Content;
-            var pad=panel.Children.OfType<Border>().Single();
+            var pad = test.TestPad;
             foreach(bool down in new[]{true,false})pad.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(test),Environment.TickCount,Key.E){RoutedEvent=down?Keyboard.PreviewKeyDownEvent:Keyboard.PreviewKeyUpEvent});
             Check(test.ReceivedDowns==1&&test.ReceivedUps==1&&!test.FixedTestEnabled&&!engine.Enabled,"Isolated keyboard pad receives routed down/up events without starting native or production input");
             RenderDiagnostic(test,Path.Combine(Path.GetDirectoryName(output)!,"ui-custom-key-safe-pad.png"));

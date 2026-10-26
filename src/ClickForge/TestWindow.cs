@@ -19,6 +19,8 @@ public sealed class TestWindow : Window, ITargetGate
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(150) };
     internal readonly ComboBox ModeSelector = new() { Margin = new(0, 7, 0, 13) };
     internal readonly ComboBox ButtonSelector = new() { Margin = new(0, 4, 0, 10) };
+    private readonly TextBlock buttonCaption = new() { Text = "Click button (controlled input test)" };
+    private readonly Expander logExpander = new();
     internal readonly TextBox MinimumInput = new() { Text = "5" };
     internal readonly TextBox MaximumInput = new() { Text = "20" };
     internal readonly TextBox SeedInput = new();
@@ -28,6 +30,11 @@ public sealed class TestWindow : Window, ITargetGate
     private readonly TextBox eventLog = new() { IsReadOnly = true, Height = 150, FontFamily = new("Consolas"), FontSize = 12, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly Button start = new() { Content = "Start test", Margin = new(0, 0, 7, 0) };
     private readonly StackPanel rangePanel = new();
+    private readonly TimingScope scope = new() { Height = 150, Margin = new(0, 6, 0, 8) };
+    private readonly TextBlock scopeSummary = new() { TextWrapping = TextWrapping.Wrap, Margin = new(0, 4, 0, 8) };
+    private readonly TextBlock scopeLegend = new() { Text = "Timing scope · gold: scheduled · green: measured · last 100 samples", TextWrapping = TextWrapping.Wrap };
+    internal TimingScopeSummary ScopeSummary => TimingScopeSummary.Calculate(simulation.Snapshot.Events);
+    internal int ScopeSampleCount => scope.SampleCount;
     private nint handle;
     private volatile bool pointerInside;
     private volatile bool keyboardTest, padKeyboardFocused;
@@ -46,13 +53,14 @@ public sealed class TestWindow : Window, ITargetGate
     private bool Variable => ModeSelector.SelectedIndex == (int)SafeTestMode.VariableTiming;
 
     internal int ReceivedDowns => received;
+    internal Border TestPad => pad;
     internal int ReceivedUps => released;
     internal Point PadCenter => pad.PointToScreen(new Point(pad.ActualWidth / 2, pad.ActualHeight / 2));
     private ClickButton SelectedButton => (ClickButton)ButtonSelector.SelectedIndex;
     public TestWindow(SafeTestMode mode = SafeTestMode.FixedCps, ClickButton button = ClickButton.Left, int customKey = 0)
     {
         KeyboardOutput.ValidateOutput(button,customKey);this.customKey=customKey;
-        Title = "ClickForge · Safe Click Test"; Width = 610; Height = 740; MinWidth = 520; MinHeight = 560;
+        Title = "ClickForge · Safe Click Test"; Width = 610; Height = 820; MinWidth = 520; MinHeight = 560;
         Height = Math.Min(Height, Math.Max(MinHeight, SystemParameters.WorkArea.Height - 50));
         SetResourceReference(BackgroundProperty, "Base"); SetResourceReference(IconProperty, "ForgeIcon");
         pad.SetResourceReference(Border.BackgroundProperty, "Elevated");
@@ -66,7 +74,7 @@ public sealed class TestWindow : Window, ITargetGate
         ModeSelector.Items.Add("Variable Timing — Safe Test Only");
         AutomationProperties.SetName(ModeSelector, "Safe test timing mode");
         panel.Children.Add(ModeSelector); panel.Children.Add(explanation);
-        panel.Children.Add(new TextBlock { Text = "Click button (controlled input test)" });
+        panel.Children.Add(buttonCaption);
         foreach (var choice in ClickButtons.MouseChoices) ButtonSelector.Items.Add(ClickButtons.Label(choice));
         if(KeyboardOutput.IsValid(customKey))ButtonSelector.Items.Add(ClickButtons.OutputLabel(ClickButton.CustomKey,customKey));
         AutomationProperties.SetName(ButtonSelector, "Safe test click button"); ButtonSelector.SelectedIndex = (int)button;
@@ -78,16 +86,20 @@ public sealed class TestWindow : Window, ITargetGate
         AddField(fields, 2, "Seed (optional integer)", SeedInput);
         rangePanel.Children.Add(fields); rangePanel.Children.Add(configured);
         panel.Children.Add(rangePanel); panel.Children.Add(validation); panel.Children.Add(status);
-        panel.Children.Add(pad); panel.Children.Add(eventLog);
+        panel.Children.Add(scopeLegend); panel.Children.Add(scope); panel.Children.Add(scopeSummary);
+        panel.Children.Add(pad); logExpander.Content = eventLog; panel.Children.Add(logExpander);
         var actions = new Grid { Margin = new(0, 14, 0, 0) };
         actions.ColumnDefinitions.Add(new()); actions.ColumnDefinitions.Add(new());
         start.SetResourceReference(StyleProperty, "PrimaryButton");
         start.Content=new TextBlock{Text="Start test",Foreground=(Brush)FindResource("Ink"),FontWeight=FontWeights.SemiBold};
         var stop = new Button { Content = "Stop test", Margin = new(7, 0, 0, 0) };
         stop.SetResourceReference(StyleProperty, "EmergencyButton"); Grid.SetColumn(stop, 1);
-        actions.Children.Add(start); actions.Children.Add(stop); panel.Children.Add(actions);
+        actions.Children.Add(start); actions.Children.Add(stop);
         panel.Children.Add(new TextBlock { Text = "Closing or leaving this window stops the test. The main emergency shortcut also stops it.", TextWrapping = TextWrapping.Wrap, Margin = new(0, 12, 0, 0), Foreground = (Brush)FindResource("Muted"), FontSize = 12 });
-        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        var root = new DockPanel();
+        actions.Margin = new(22, 8, 22, 14); DockPanel.SetDock(actions, Dock.Bottom); root.Children.Add(actions);
+        root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        Content = root;
         start.Click += (_, _) => StartTest(); stop.Click += (_, _) => StopTest();
         pad.MouseEnter += (_, _) => pointerInside = true;
         pad.MouseLeave += (_, _) => pointerInside = false;
@@ -140,10 +152,13 @@ public sealed class TestWindow : Window, ITargetGate
     private void UpdateMode()
     {
         rangePanel.Visibility = Variable ? Visibility.Visible : Visibility.Collapsed;
+        scope.Visibility = scopeSummary.Visibility = scopeLegend.Visibility = Variable ? Visibility.Visible : Visibility.Collapsed;
         eventLog.Visibility = Visibility.Visible;
         ButtonSelector.IsEnabled = !Variable;
+        buttonCaption.Visibility = ButtonSelector.Visibility = Variable ? Visibility.Collapsed : Visibility.Visible;
+        logExpander.Header = Variable ? "Logical event samples" : "Received input events"; logExpander.IsExpanded = !Variable;
         pad.Visibility = Variable ? Visibility.Collapsed : Visibility.Visible;
-        explanation.Text = Variable ? "Logical simulation only. No mouse input is sent. Each run lasts up to 5 seconds. A seed repeats requested intervals; measured timing can vary." : "Controlled test: 2 seconds at 10 CPS using the selected button. Move the pointer inside the pad. Down and up events received here are shown below; no Roblox input is used.";
+        explanation.Text = Variable ? "Logical simulation only; no live input. Each run lasts up to 5 seconds. A seed repeats scheduled intervals; Windows scheduling affects measurements. Timing does not establish target input acceptance." : "Controlled test: 2 seconds at 10 CPS using the selected button. Move the pointer inside the pad. Down and up events received here are shown below; no Roblox input is used.";
         if(!Variable&&SelectedButton==ClickButton.CustomKey)explanation.Text="Controlled keyboard test: 2 seconds at 10 CPS. Keep the pointer and keyboard focus inside the pad. It records key down/up events; no Roblox input is used.";
         ((TextBlock)pad.Child).Text=SelectedButton==ClickButton.CustomKey?"Keyboard test pad · "+KeyboardOutput.Label(customKey):"Fixed-CPS mouse input target";
         status.Text = Variable ? "Ready · logical events only" : "Ready · 10 CPS · "+ClickButtons.OutputLabel(SelectedButton,customKey);
@@ -157,6 +172,7 @@ public sealed class TestWindow : Window, ITargetGate
             if (!TryConfiguration(out var range, out int? seed, out string? error)) { validation.Text = error; return; }
             if (!simulation.Completion.IsCompleted) { validation.Text = "The previous simulation is stopping. Start again when it finishes."; return; }
             _ = simulation.Start(range!, seed);
+            scope.SetSamples([]); scopeSummary.Text = "Waiting for timing samples…";
             eventLog.Text = "#    elapsed ms   requested ms   measured ms";
         }
         else
@@ -190,6 +206,9 @@ public sealed class TestWindow : Window, ITargetGate
             if (started)
             {
                 var measured = snapshot.Measurement;
+                scope.SetSamples(snapshot.Events);
+                var summary = TimingScopeSummary.Calculate(snapshot.Events);
+                scopeSummary.Text = $"Scheduled mean: {summary.ScheduledMean:0.00} ms · measured mean: {summary.MeasuredMean:0.00} ms\nMeasured spread: {summary.Minimum:0.00}–{summary.Maximum:0.00} ms · standard deviation: {summary.StandardDeviation:0.00} ms\nScheduling delay: mean {summary.MeanDelay:0.00} ms · maximum {summary.MaximumDelay:0.00} ms";
                 status.Text = $"{(snapshot.Error is not null ? "Error" : snapshot.Running ? "Simulating" : snapshot.Cancelled ? "Stopped" : "Completed")} · {measured.EventCount} logical events\nMeasured average: {measured.AverageCps:0.00} CPS · mean interval: {measured.MeanIntervalMs:0.00} ms\nMeasured elapsed: {measured.ElapsedMs / 1000:0.000} s";
                 eventLog.Text = "#    elapsed ms   requested ms   measured ms\n" + string.Join("\n", snapshot.Events.TakeLast(60).Select(e => $"{e.Number,3}  {e.ElapsedMs,10:0.00}  {e.RequestedIntervalMs,12:0.00}  {e.MeasuredIntervalMs,11:0.00}"));
                 if (snapshot.Error is not null) validation.Text = snapshot.Error;
