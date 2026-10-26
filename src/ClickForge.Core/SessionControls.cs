@@ -52,3 +52,10 @@ public sealed class SafetyTimeline
     }
     public void Clear() { lock (entries) { entries.Clear(); version++; } }
 }
+
+public readonly record struct ControlAvailability(bool StartEnabled, bool PauseEnabled, string StartLabel, string PauseLabel)
+{
+    public static ControlAvailability For(bool enabled, bool paused, ActivationMode mode, bool shortcutsReady, bool blocked) =>
+        new(shortcutsReady && (enabled || !blocked && mode == ActivationMode.Toggle), enabled,
+            enabled ? "Stop input" : mode == ActivationMode.Hold ? "Use Hold shortcut" : "Start input", paused ? "Resume" : "Pause");
+}
