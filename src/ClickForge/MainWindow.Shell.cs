@@ -14,6 +14,9 @@ public partial class MainWindow
     private Guid? displayedProfile;
     private TimingProfile[] quickProfiles = [];
     private (bool, bool, long, long, double)? lastSessionDisplay;
+    private readonly record struct InspectorDisplay(DesktopTargetService.Inspection? Snapshot, TargetStatus Selected, TargetStatus Active,
+        ClickTimingMode Mode, bool Restricted, int Cps, int Minimum, int Maximum, string Feedback, bool HasSelection);
+    private InspectorDisplay? lastInspectorDisplay;
     private void RenderSessionStatistics()
     {
         var session = engine.Session;
@@ -97,30 +100,36 @@ public partial class MainWindow
         var selectedStatus = snapshot?.Status ?? desktopTarget.Status;
         var activeStatus = settings.TimingMode == ClickTimingMode.Variable ? selectedStatus : target.Status;
         RenderSessionStatistics();
-        TargetPlaceholder.Visibility = DesktopTargetInput.SelectedItem is null ? Visibility.Visible : Visibility.Collapsed;
-        InspectorFeedback.Text = VariableValidationText.Text;
-        InspectorFeedback.Visibility = string.IsNullOrEmpty(InspectorFeedback.Text) ? Visibility.Collapsed : Visibility.Visible;
-        InspectorIdentity.Text = snapshot is null ? "No window selected" : snapshot.VerifiedRoblox ? "Roblox client" : "Desktop application";
-        InspectorVerification.Text = snapshot is null ? "Select a window for Variable CPS" : snapshot.VerifiedRoblox ? "Roblox identity verified at selection" : "Desktop metadata checked at selection";
-        InspectorVerification.Foreground = (Brush)FindResource(snapshot is { VerifiedRoblox: true } && selectedStatus.ChecksPassed ? "Success" : "Muted");
-        InspectorEligibilityText.Text = selectedStatus.Label + ". " + selectedStatus.Explanation;
-        InspectorEligibilityText.Foreground = (Brush)FindResource(selectedStatus.ChecksPassed ? "Success" : "Muted");
-        InspectorPolicyText.Text = (settings.TimingMode == ClickTimingMode.Variable ? "Variable CPS: " : "Fixed CPS: ") + activeStatus.Explanation;
-        InspectorProcess.Text = snapshot?.Identity ?? "—"; InspectorTitle.Text = snapshot?.Title ?? "—";
-        InspectorFocus.Text = SelectedFocusText(snapshot?.Facts);
-        InspectorProcessState.Text = snapshot is null ? "Not selected" : !snapshot.Facts.InspectionSucceeded ? "Check unavailable" : snapshot.Facts.ProcessAlive ? "Alive" : "Closed";
-        InspectorValidity.Text = snapshot is null ? "Not selected" : !snapshot.Facts.InspectionSucceeded ? "Check unavailable" : !snapshot.Facts.WindowExists ? "Closed" : !snapshot.Facts.IdentityMatches ? "Identity changed" : snapshot.Facts.Minimized ? "Minimized" : !snapshot.Facts.WindowVisible ? "Hidden" : snapshot.Valid ? "●  Valid" : "Validation failed";
-        InspectorPointer.Text = snapshot is null || !snapshot.Valid ? "Not measured" : !snapshot.Facts.PointerKnown ? "Unavailable" : snapshot.PointerInside ? "●  Inside window" : "○  Outside window";
-        InspectorFocus.Foreground = (Brush)FindResource(snapshot?.Foreground == true ? "Success" : "Muted");
-        InspectorValidity.Foreground = (Brush)FindResource(snapshot?.Valid == true ? "Success" : "Muted");
-        InspectorPointer.Foreground = (Brush)FindResource(snapshot?.PointerInside == true ? "Success" : "Muted");
-        RobloxStatusText.Text = activeStatus.Label;
-        RobloxStatusText.Foreground = (Brush)FindResource(activeStatus.ChecksPassed ? "Success" : "Text");
-        TargetText.Text = settings.TimingMode == ClickTimingMode.Variable ? "Selected-window checks · see Target" : settings.RobloxOnly ? "Roblox foreground restriction" : "Any foreground application";
-        TargetText.ToolTip = activeStatus.Explanation;
-        if (!engine.Enabled && engine.State != EngineState.Error) StateHintText.Text = "Activate explicitly";
-        if (engine.Enabled && !engine.IsPaused && engine.State != EngineState.Running && engine.State != EngineState.Error) StateHintText.Text = activeStatus.Label;
-        ConfiguredIntervalText.Text = settings.TimingMode == ClickTimingMode.Fixed ? $"≈ {Speed.Interval(settings.Cps):0.#} ms" : $"{1000d / settings.MaximumCps:0.#}–{1000d / settings.MinimumCps:0.#} ms";
+        var display = new InspectorDisplay(snapshot, selectedStatus, activeStatus, settings.TimingMode, settings.RobloxOnly,
+            settings.Cps, settings.MinimumCps, settings.MaximumCps, VariableValidationText.Text, DesktopTargetInput.SelectedItem is not null);
+        if (lastInspectorDisplay != display)
+        {
+            lastInspectorDisplay = display;
+            TargetPlaceholder.Visibility = DesktopTargetInput.SelectedItem is null ? Visibility.Visible : Visibility.Collapsed;
+            InspectorFeedback.Text = VariableValidationText.Text;
+            InspectorFeedback.Visibility = string.IsNullOrEmpty(InspectorFeedback.Text) ? Visibility.Collapsed : Visibility.Visible;
+            InspectorIdentity.Text = snapshot is null ? "No window selected" : snapshot.VerifiedRoblox ? "Roblox client" : "Desktop application";
+            InspectorVerification.Text = snapshot is null ? "Select a window for Variable CPS" : snapshot.VerifiedRoblox ? "Roblox identity verified at selection" : "Desktop metadata checked at selection";
+            InspectorVerification.Foreground = (Brush)FindResource(snapshot is { VerifiedRoblox: true } && selectedStatus.ChecksPassed ? "Success" : "Muted");
+            InspectorEligibilityText.Text = selectedStatus.Label + ". " + selectedStatus.Explanation;
+            InspectorEligibilityText.Foreground = (Brush)FindResource(selectedStatus.ChecksPassed ? "Success" : "Muted");
+            InspectorPolicyText.Text = (settings.TimingMode == ClickTimingMode.Variable ? "Variable CPS: " : "Fixed CPS: ") + activeStatus.Explanation;
+            InspectorProcess.Text = snapshot?.Identity ?? "—"; InspectorTitle.Text = snapshot?.Title ?? "—";
+            InspectorFocus.Text = SelectedFocusText(snapshot?.Facts);
+            InspectorProcessState.Text = snapshot is null ? "Not selected" : !snapshot.Facts.InspectionSucceeded ? "Check unavailable" : snapshot.Facts.ProcessAlive ? "Alive" : "Closed";
+            InspectorValidity.Text = snapshot is null ? "Not selected" : !snapshot.Facts.InspectionSucceeded ? "Check unavailable" : !snapshot.Facts.WindowExists ? "Closed" : !snapshot.Facts.IdentityMatches ? "Identity changed" : snapshot.Facts.Minimized ? "Minimized" : !snapshot.Facts.WindowVisible ? "Hidden" : snapshot.Valid ? "●  Valid" : "Validation failed";
+            InspectorPointer.Text = snapshot is null || !snapshot.Valid ? "Not measured" : !snapshot.Facts.PointerKnown ? "Unavailable" : snapshot.PointerInside ? "●  Inside window" : "○  Outside window";
+            InspectorFocus.Foreground = (Brush)FindResource(snapshot?.Foreground == true ? "Success" : "Muted");
+            InspectorValidity.Foreground = (Brush)FindResource(snapshot?.Valid == true ? "Success" : "Muted");
+            InspectorPointer.Foreground = (Brush)FindResource(snapshot?.PointerInside == true ? "Success" : "Muted");
+            RobloxStatusText.Text = activeStatus.Label;
+            RobloxStatusText.Foreground = (Brush)FindResource(activeStatus.ChecksPassed ? "Success" : "Text");
+            TargetText.Text = settings.TimingMode == ClickTimingMode.Variable ? "Selected-window checks · see Target" : settings.RobloxOnly ? "Roblox foreground restriction" : "Any foreground application";
+            TargetText.ToolTip = activeStatus.Explanation;
+            ConfiguredIntervalText.Text = settings.TimingMode == ClickTimingMode.Fixed ? $"≈ {Speed.Interval(settings.Cps):0.#} ms" : $"{1000d / settings.MaximumCps:0.#}–{1000d / settings.MinimumCps:0.#} ms";
+        }
+        StateHintText.Text = engine.State == EngineState.Error ? "Input stopped safely" : engine.IsPaused ? "Paused by you" :
+            !engine.Enabled ? "Activate explicitly" : engine.State == EngineState.Running ? "Sending input pairs" : activeStatus.Label;
         StateGlyph.Text = engine.State switch { EngineState.Running => "▶", EngineState.Paused => "Ⅱ", EngineState.Error => "!", _ => "■" };
         RailState.Text = RailColumn.Width.Value == 58 ? "●" : "●  " + EffectiveState;
         RailState.ToolTip = EffectiveState;

@@ -136,12 +136,6 @@ public partial class MainWindow
     private void RenderVariableStatus()
     {
         if (settings.TimingMode != ClickTimingMode.Variable) { ConfiguredCpsText.FontSize = 23; return; }
-        bool allowed = desktopTarget.CanClick;
-        RobloxStatusText.Text = allowed ? "Desktop target in focus" : "Desktop target required";
-        RobloxStatusText.Foreground = (System.Windows.Media.Brush)FindResource(allowed ? "Success" : "Text");
-        string title = desktopTarget.SelectedTitle;
-        TargetText.Text = title.Length > 70 ? title[..67] + "…" : title;
-        TargetText.ToolTip = title;
         ConfiguredCpsText.FontSize = 18; ConfiguredCpsText.Text = $"{settings.MinimumCps}–{settings.MaximumCps}";
         StartButton.ToolTip = "Variable CPS requires an eligible selected desktop window. Verified Roblox clients are supported. Input pauses on focus loss or when the pointer leaves the target.";
     }

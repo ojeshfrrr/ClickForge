@@ -24,7 +24,7 @@ public partial class MainWindow : Window
     private nint holdWindow;
     private TestWindow? activeTest;
     private long displayedClicks, nextCounterUpdate;
-    private (EngineState, bool, bool, long, int, ActivationMode, bool, bool, bool, bool, int, int, int)? lastDisplay;
+    private (EngineState, bool, bool, long, int, ActivationMode, bool, bool, int, int, int)? lastDisplay;
     private readonly string? previewPath = GetPreviewPath();
     private readonly string? selfTestPath = GetArgument("--ui-self-test") ?? GetArgument("--ui-interactive-test") ?? GetArgument("--performance-test");
     private readonly bool performanceTest = GetArgument("--performance-test") is not null;
@@ -201,20 +201,13 @@ public partial class MainWindow : Window
     {
         if (closing) return;
         bool active = engine.Enabled;
-        bool foreground = target.RobloxForeground;
-        bool checking = target.IsChecking;
         if (!active || Environment.TickCount64 >= nextCounterUpdate) { displayedClicks = engine.Clicks; nextCounterUpdate = Environment.TickCount64 + 1000; }
-        var display = (engine.State, active, engine.IsPaused, displayedClicks, settings.Cps, settings.Mode, settings.RobloxOnly, foreground, checking, shortcutsReady, settings.ActivateKey, settings.PauseKey, settings.StopKey);
-        if (lastDisplay == display) { RenderVariableStatus(); UpdateDailyStatus(); return; }
+        var display = (engine.State, active, engine.IsPaused, displayedClicks, settings.Cps, settings.Mode, settings.RobloxOnly, shortcutsReady, settings.ActivateKey, settings.PauseKey, settings.StopKey);
+        if (lastDisplay == display) { UpdateDailyStatus(); return; }
         lastDisplay = display;
-        string text = engine.State switch { EngineState.Running => "Clicking", EngineState.Error => "Error", EngineState.Paused => "Paused", _ => "Stopped" };
-        StatusText.Text = text;
         StatusDot.Fill = (Brush)FindResource(engine.State switch { EngineState.Running => "Success", EngineState.Error => "Failure", EngineState.Paused => "Warning", _ => "Muted" });
-        RobloxStatusText.Text = foreground ? "Roblox verified" : checking ? "Checking foreground…" : "No verified Roblox foreground";
-        RobloxStatusText.Foreground = (Brush)FindResource(foreground ? "Success" : "Text");
-        TargetText.Text = !settings.RobloxOnly ? "Restriction off · any application" : foreground ? "Roblox is in focus" : "Waiting for Roblox to be in focus";
-        StateHintText.Text = engine.State == EngineState.Error ? "Input stopped safely" : engine.IsPaused ? "Paused by you" : active && engine.State != EngineState.Running ? "Waiting for target" : active ? "Sending input pairs" : "Ready to start";
-        CycleText.Text = displayedClicks.ToString("N0"); ConfiguredCpsText.Text = settings.Cps.ToString();
+        CycleText.Text = displayedClicks.ToString("N0");
+        if (settings.TimingMode == ClickTimingMode.Fixed) ConfiguredCpsText.Text = settings.Cps.ToString();
         StartLabel.Text = settings.Button==ClickButton.CustomKey ? active?"Stop input":settings.Mode==ActivationMode.Hold?"Hold to repeat":"Start input" : active ? "Stop clicking" : settings.Mode == ActivationMode.Hold ? "Hold to click" : "Start clicking";
         StartIcon.Text = active ? "■" : "▶";
         StartButton.IsEnabled = shortcutsReady && (settings.Mode == ActivationMode.Toggle || active);
