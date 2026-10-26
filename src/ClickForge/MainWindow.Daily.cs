@@ -42,6 +42,7 @@ public partial class MainWindow
         {
             if (WindowState == WindowState.Minimized && settings.MinimizeToTray && CanHideToTray) HideToTray();
             else if (WindowState != WindowState.Minimized) restoredState = WindowState;
+            UpdateStatus();
         };
         UpdateProfileLabel();
         AutomationProperties.SetName(StartButton, "Start or stop clicking");
@@ -70,7 +71,7 @@ public partial class MainWindow
     internal void RestoreWindow()
     {
         if (closing) return;
-        hiddenToTray = false; refresh.Interval = TimeSpan.FromMilliseconds(250); Show(); WindowState = restoredState == WindowState.Minimized ? WindowState.Normal : restoredState; Activate();
+        hiddenToTray = false; Show(); WindowState = restoredState == WindowState.Minimized ? WindowState.Normal : restoredState; Activate(); UpdateStatus();
         // Restoring a window never changes engine activation.
     }
     internal void PrepareExit() { exitRequested = true; engine.Stop(); activeTest?.StopTest(); }

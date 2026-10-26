@@ -200,6 +200,7 @@ public partial class MainWindow : Window
     private void UpdateStatus()
     {
         if (closing) return;
+        UpdateRefreshCadence();
         bool active = engine.Enabled;
         if (!active || Environment.TickCount64 >= nextCounterUpdate) { displayedClicks = engine.Clicks; nextCounterUpdate = Environment.TickCount64 + 1000; }
         var display = (engine.State, active, engine.IsPaused, displayedClicks, settings.Cps, settings.Mode, settings.RobloxOnly, shortcutsReady, settings.ActivateKey, settings.PauseKey, settings.StopKey);
@@ -217,6 +218,13 @@ public partial class MainWindow : Window
         ModeHelp.Text = ShortcutKeys.ConflictsWithHoldOutput(settings) ? "Hold activation requires a different click-output button." : settings.Mode == ActivationMode.Hold ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to click. Release or change focus to stop." : $"Press {ShortcutKeys.Label(settings.ActivateKey)} once to start, again to stop.";
         RenderVariableStatus(); UpdateDailyStatus();
         if (engine.Error is { } error) MessageText.Text = error;
+    }
+    private void UpdateRefreshCadence()
+    {
+        // State-changing commands still refresh immediately. Idle and background
+        // windows wake once a second; visible session metrics update twice a second.
+        var interval = TimeSpan.FromMilliseconds(engine.Enabled && IsVisible && WindowState != WindowState.Minimized ? 500 : 1000);
+        if (refresh.Interval != interval) refresh.Interval = interval;
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
