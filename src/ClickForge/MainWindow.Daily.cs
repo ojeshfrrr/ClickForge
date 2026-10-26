@@ -102,7 +102,7 @@ public partial class MainWindow
             if (state == "Error") history.Add(ActivityKind.InputError);
             lastActivityState = state;
         }
-        tray?.Update(state, engine.Enabled, engine.IsPaused, shortcutsReady && settings.Mode == ActivationMode.Toggle && activeTest is null && profilesWindow is null && preferencesWindow is null && targetWindow is null && customKeyWindow is null);
+        tray?.Update(state, engine.Enabled, engine.IsPaused, shortcutsReady && settings.Mode == ActivationMode.Toggle && !ConfigurationBlocked);
     }
     private void UpdateDailyStatus()
     {
@@ -110,7 +110,7 @@ public partial class MainWindow
         RenderInspector();
         UpdateActivityAndTray();
         string state = EffectiveState;
-        if (!engine.Enabled && (profilesWindow?.IsVisible == true || preferencesWindow?.IsVisible == true || targetWindow?.IsVisible == true || customKeyWindow?.IsVisible == true))
+        if (!engine.Enabled && ConfigurationBlocked)
         { StartButton.IsEnabled = false; StartButton.ToolTip = "Close configuration views before activating clicking."; }
         else StartButton.IsEnabled = shortcutsReady && (settings.Mode == ActivationMode.Toggle || engine.Enabled);
         StatusText.Text = state;
@@ -129,6 +129,7 @@ public partial class MainWindow
         ActiveProfileText.Text = profile is null ? "Custom configuration" : profile.Name + (profile.Matches(settings) ? "" : " · modified");
         ActiveProfileText.ToolTip = profile is null ? "Create a profile to save this timing configuration." : profile.Summary;
         RefreshQuickProfiles();
+        RefreshAssociationSuggestion();
     }
     private void ApplyProfile(TimingProfile profile)
     {

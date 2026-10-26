@@ -46,7 +46,7 @@ public partial class MainWindow : Window
         else if (previewPath is not null) store = new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(previewPath))!, "preview-settings.json"));
         settings = store.Load();
         if (settings.LayoutVersion < 3) settings = settings with { Width = 1280, Height = 920, LayoutVersion = 3 };
-        engine = selfTestPath is null ? new(new MouseInputService(), target, desktopTarget) : new(new DiagnosticMouse(), new DiagnosticTarget());
+        engine = selfTestPath is null ? new(new MouseInputService(), target, desktopTarget) : new(diagnosticMouse, diagnosticTarget);
         InitializeComponent();
         foreach (var button in Enum.GetValues<ClickButton>()) ClickButtonInput.Items.Add(ClickButtons.Label(button));
         InitializeUpdates();
@@ -54,6 +54,7 @@ public partial class MainWindow : Window
         LoadControls();
         MessageText.Text = store.Warning ?? "Starts disabled. Clicks are sent at the current pointer.";
         InitializeDaily();
+        InitializeAdvanced();
         ready = true;
         SourceInitialized += (_, _) =>
         {
@@ -102,6 +103,8 @@ public partial class MainWindow : Window
         PauseInput.SelectedItem = ShortcutKeys.Label(settings.PauseKey);
         StopInput.SelectedItem = ShortcutKeys.Label(settings.StopKey);
         engine.Cps = settings.Cps; target.Restricted = settings.RobloxOnly;
+        engine.ConfigureLimits(new(settings.MaximumSessionSeconds, settings.MaximumSessionPairs));
+        if (advancedControls is not null) LoadLimitControls();
         UpdateSpeedLabel(); LoadTimingControls(); ready = true;
     }
     private bool Persist()
@@ -145,7 +148,7 @@ public partial class MainWindow : Window
     private void ToggleStart() { if (activeTest?.IsVisible == true) return; if (engine.Enabled) { engine.Stop(); history.Add(ActivityKind.Stopped); } else if (shortcutsReady && settings.Mode == ActivationMode.Toggle) StartValidated(); UpdateStatus(); }
     private void StartClicked(object sender, RoutedEventArgs e) => ToggleStart();
     private void PauseClicked(object sender, RoutedEventArgs e) { engine.TogglePause(); if (engine.Enabled) history.Add(engine.IsPaused ? ActivityKind.Paused : ActivityKind.Started); UpdateStatus(); }
-    private void EmergencyClicked(object sender, RoutedEventArgs e) { engine.Stop(); activeTest?.StopTest(); history.Add(ActivityKind.EmergencyStop); UpdateStatus(); }
+    private void EmergencyClicked(object sender, RoutedEventArgs e) { engine.EmergencyStop(); activeTest?.StopTest(); history.Add(ActivityKind.EmergencyStop); UpdateStatus(); }
     private void SpeedChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!ready) return;
@@ -201,6 +204,7 @@ public partial class MainWindow : Window
     {
         if (closing) return;
         UpdateRefreshCadence();
+        UpdateAdvancedStatus();
         // The input worker owns its safety checks and timing independently. A
         // hidden dashboard needs only tray/error updates, not offscreen layout.
         if (IsLoaded && (!IsVisible || WindowState == WindowState.Minimized))
@@ -231,7 +235,8 @@ public partial class MainWindow : Window
     {
         // State-changing commands still refresh immediately. Idle and background
         // windows wake once a second; visible session metrics update twice a second.
-        var interval = TimeSpan.FromMilliseconds(engine.Enabled && IsVisible && WindowState != WindowState.Minimized ? 500 : 1000);
+        bool visibleControls = IsVisible && WindowState != WindowState.Minimized || compactWindow?.IsVisible == true && compactWindow.WindowState != WindowState.Minimized;
+        var interval = TimeSpan.FromMilliseconds(engine.Enabled && visibleControls ? 500 : 1000);
         if (refresh.Interval != interval) refresh.Interval = interval;
     }
     private void OnClosing(object? sender, CancelEventArgs e)
@@ -239,7 +244,7 @@ public partial class MainWindow : Window
         if (selfTestPath is not null) File.AppendAllText(selfTestPath, "WPF closing" + Environment.NewLine);
         if (closing) return;
         if (!exitRequested && previewPath is null && settings.CloseToTray && CanHideToTray) { e.Cancel = true; HideToTray(); return; }
-        closing = true; customKeyWindow?.Close(); targetWindow?.Close(); tray?.Dispose(); tray = null; profilesWindow?.Close(); preferencesWindow?.Close(); updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
+        closing = true; compactWindow?.Close(); paletteWindow?.Close(); customKeyWindow?.Close(); targetWindow?.Close(); tray?.Dispose(); tray = null; profilesWindow?.Close(); preferencesWindow?.Close(); updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
         if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 3 }; Persist(); }
     }
     private void LayoutChanged(object sender, SizeChangedEventArgs e)

@@ -46,6 +46,7 @@ internal sealed class DesktopTargetService : IVariableTargetGate, IDisposable
     internal static string RetainedTitle(SelectedTargetFacts facts, string original, Func<string> readCurrent) => facts.WindowIdentityValid ? readCurrent() : original;
     private DesktopWindow? selected;
     private bool selectionRejected;
+    internal string? ApplicationKey { get { lock (gate) return selected is null ? null : ApplicationProfiles.Identity(selected.Path); } }
     public TargetStatus Status { get { lock (gate) return Snapshot?.Status ?? new(selectionRejected ? TargetBlockReason.SelectionRejected : TargetBlockReason.NoSelection); } }
     private Process? process;
     public string SelectedTitle { get { lock (gate) return selected?.Title ?? "No desktop window selected"; } }

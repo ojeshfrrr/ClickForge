@@ -121,10 +121,12 @@ public partial class MainWindow
         engine.Stop();
         try { desktopTarget.Select(DesktopTargetInput.SelectedItem as DesktopWindow); VariableValidationText.Text = ""; }
         catch (Exception ex) { VariableValidationText.Text = ex.Message; }
+        RefreshAssociationSuggestion();
         lastDisplay = null; UpdateStatus();
     }
     private void StartValidated()
     {
+        if (paletteWindow?.IsVisible == true) { MessageText.Text = "Close the command palette before activating input."; return; }
         if(customKeyWindow?.IsVisible==true){engine.Stop();MessageText.Text="Finish choosing the custom input key before activation.";return;}
         try{settings.Validate();}catch(ArgumentException ex){engine.Stop();MessageText.Text=ex.Message;return;}
         if (ShortcutKeys.ConflictsWithHoldOutput(settings)) { engine.Stop(); MessageText.Text = "Hold mode requires a different click-output button from the mouse activation shortcut. Choose Left output, another side button, or Toggle mode."; return; }
