@@ -59,3 +59,14 @@ public readonly record struct ControlAvailability(bool StartEnabled, bool PauseE
         new(shortcutsReady && (enabled || !blocked && mode == ActivationMode.Toggle), enabled,
             enabled ? "Stop input" : mode == ActivationMode.Hold ? "Use Hold shortcut" : "Start input", paused ? "Resume" : "Pause");
 }
+
+public static class PaletteInput
+{
+    public static bool TryCps(string query, out int cps)
+    {
+        cps = 0;
+        var parts = query.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 2 && parts[0].Equals("cps", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(parts[1], out cps) && cps is >= 1 and <= 50;
+    }
+}
