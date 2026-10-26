@@ -201,6 +201,14 @@ public partial class MainWindow : Window
     {
         if (closing) return;
         UpdateRefreshCadence();
+        // The input worker owns its safety checks and timing independently. A
+        // hidden dashboard needs only tray/error updates, not offscreen layout.
+        if (IsLoaded && (!IsVisible || WindowState == WindowState.Minimized))
+        {
+            lastDisplay = null;
+            UpdateActivityAndTray();
+            return;
+        }
         bool active = engine.Enabled;
         if (!active || Environment.TickCount64 >= nextCounterUpdate) { displayedClicks = engine.Clicks; nextCounterUpdate = Environment.TickCount64 + 1000; }
         var display = (engine.State, active, engine.IsPaused, displayedClicks, settings.Cps, settings.Mode, settings.RobloxOnly, shortcutsReady, settings.ActivateKey, settings.PauseKey, settings.StopKey);
