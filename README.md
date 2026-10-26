@@ -1,6 +1,6 @@
 # ClickForge
 
-A native Windows mouse-click and key-repeat utility built with C# and WPF. **v1.3.2** adds lighter dashboard updates while preserving Fixed/Variable CPS, mouse/keyboard output, global keyboard/mouse shortcuts, session statistics, foreground restrictions, profiles, the optional system tray workflow and in-app updates. See the [release notes](docs/RELEASE-v1.3.2.md).
+A native Windows mouse-click and key-repeat utility built with C# and WPF. **v1.4.0** adds session limits, application-profile suggestions, a safe-test timing scope, compact controls, a command palette and a private safety timeline while preserving Fixed/Variable CPS, mouse/keyboard output, target restrictions, profiles, shortcuts and in-app updates. See the [release notes](docs/RELEASE-v1.4.0.md).
 
 The application uses an obsidian-and-champagne interface with responsive navigation and a genuine target/profile inspector. See the [redesign, complete change list and verification report](docs/OBSIDIAN-REDESIGN.md).
 
@@ -9,6 +9,8 @@ The application uses an obsidian-and-champagne interface with responsive navigat
 The dashboard also shows current-session wall-clock elapsed time (including pauses and target waits), input pairs sent, and measured average CPS. Stop freezes these values; a new explicit activation resets them. Target explanations report the actual blocking check. These statistics remain in memory and do not imply the target accepted input. See [session statistics and target status](docs/SESSION-STATISTICS.md).
 
 Dashboard refreshes now run once per second while idle and twice per second while active. Hidden/minimized windows skip dashboard rendering; tray state and global shortcuts remain available. Commands and restoring the window refresh immediately. The click worker and target restrictions are unchanged. This reduces UI work, not the bundled WPF runtime size; no major RAM reduction or zero-CPU guarantee is claimed. See [measurements and verification limits](docs/LIGHTWEIGHT.md).
+
+Expand **Global shortcuts & advanced controls → Advanced session controls** for session auto-stop limits, application-profile suggestions and the private safety timeline. Use the navigation-footer buttons for compact controls and the command palette, or press **Ctrl+K**. Safe Click Test includes a logical timing scope. See [usage, privacy and verification](docs/ADVANCED-CONTROLS.md).
 
 Choose **Left**, **Mouse 4 (Back)** or **Mouse 5 (Forward)** beside Click speed. Left remains the default. Changing the button stops input and requires explicit activation; settings and profiles remember it. Open **Safe click test → Fixed CPS** to select a button and inspect down/up events received by the controlled pad. Unsupported or blocked input stops with an error and never falls back to Left. See [button behavior and verification](docs/MOUSE-BUTTONS.md).
 
