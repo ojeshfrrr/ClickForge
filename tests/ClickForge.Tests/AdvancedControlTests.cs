@@ -70,6 +70,34 @@ internal static class AdvancedControlTests
             var stop = Task.Run(engine.Stop); Check(!stop.Wait(25)); input.Finish.Set(); Check(stop.Wait(2000));
             Check(!input.Down && engine.Session.InputPairsSent == 1 && !engine.Enabled);
         });
+        test("Emergency stop and shutdown preserve release and actual history", () =>
+        {
+            var input = new Input(); var engine = new ClickEngine(input, new Gate()); engine.ConfigureLimits(new(InputPairs: 100));
+            engine.Start(); Until(() => input.Count > 0); engine.EmergencyStop(); Check(!engine.Enabled && engine.LastStopReason == SessionEventKind.EmergencyStop);
+            engine.Dispose(); Check(input.Releases > 0 && engine.Timeline.Entries.Last().Kind == SessionEventKind.Shutdown);
+        });
+        test("Failed release at auto-stop reports error instead of successful limit stop", () =>
+        {
+            using var engine = new ClickEngine(new FailingRelease(), new Gate()); engine.ConfigureLimits(new(InputPairs: 1)); engine.Start();
+            Until(() => engine.State == EngineState.Error); Check(!engine.Enabled && engine.LastStopReason == SessionEventKind.InputError && engine.Session.InputPairsSent == 1);
+            Check(engine.Timeline.Entries.Last().Kind == SessionEventKind.InputError);
+        });
+        test("Safety timeline captures real transitions once instead of per input", () =>
+        {
+            var target = new Gate(); using var engine = new ClickEngine(new Input(), target) { Cps = 50 };
+            engine.Start(); Until(() => engine.Clicks >= 3); target.Allowed = false; Until(() => engine.State == EngineState.Paused);
+            Thread.Sleep(130); Check(engine.Timeline.Entries.Count(e => e.Kind == SessionEventKind.TargetLost) == 1);
+            target.Allowed = true; Until(() => engine.State == EngineState.Running); engine.TogglePause(); engine.TogglePause(); engine.Stop();
+            var events = engine.Timeline.Entries.Select(e => e.Kind).ToArray();
+            Check(events.Contains(SessionEventKind.TargetRestored) && events.Contains(SessionEventKind.Paused) && events.Contains(SessionEventKind.Resumed));
+        });
+        test("Safety history is bounded private and clearable", () =>
+        {
+            var timeline = new SafetyTimeline(capacity: 3); for (int i = 0; i < 20; i++) timeline.Record(SessionEventKind.Stopped);
+            Check(timeline.Entries.Length == 3 && typeof(SessionEvent).GetProperties().Where(p => p.Name is not "Description").All(p => p.Name is "Time" or "Kind"));
+            var copy = timeline.Entries; copy[0] = default; Check(timeline.Entries[0].Time != default);
+            long version = timeline.Version; timeline.Clear(); Check(timeline.Version > version && timeline.Entries.Length == 0);
+        });
     }
     private static void WithDirectory(Action<string> action)
     { string dir = Path.GetFullPath(Path.Combine("artifacts", "advanced-test-" + Guid.NewGuid())); Directory.CreateDirectory(dir); try { action(dir); } finally { Directory.Delete(dir, true); } }
