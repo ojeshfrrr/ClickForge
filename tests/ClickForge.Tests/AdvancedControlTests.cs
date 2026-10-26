@@ -111,6 +111,36 @@ internal static class AdvancedControlTests
             engine.ConfigureLimits(new(70, 18)); var next = TimingProfile.Capture(new Settings { Cps = 15 }, "Test").Apply(settings, engine);
             Check(next.MaximumSessionSeconds == 70 && next.MaximumSessionPairs == 18 && engine.Limits == new SessionLimits(70, 18) && !engine.Enabled);
         });
+        test("Application identity fingerprints are path specific and contain no raw metadata", () =>
+        {
+            string a = Path.GetFullPath("artifacts/Example/app.exe"), b = Path.GetFullPath("artifacts/Other/app.exe");
+            string key = ApplicationProfiles.Identity(a); Check(key.Length == 64 && key.All(char.IsAsciiHexDigit) && key != ApplicationProfiles.Identity(b));
+            Check(key == ApplicationProfiles.Identity(a.ToUpperInvariant())); Invalid(() => ApplicationProfiles.Identity("relative.exe"));
+        });
+        test("Application suggestions persist only fingerprint and profile ID without applying", () => WithDirectory(dir =>
+        {
+            var profile = TimingProfile.Capture(new Settings { Cps = 12 }, "Private profile"); string path = Path.Combine(dir, "associations.json");
+            var store = new ApplicationProfiles(path); string app = Path.GetFullPath("artifacts/private-app.exe"), key = ApplicationProfiles.Identity(app);
+            store.Associate(key, profile.Id); Check(new ApplicationProfiles(path).Find(key, [profile]) == profile.Id);
+            string json = File.ReadAllText(path); Check(!json.Contains(app) && !json.Contains("Private profile") && !json.Contains("Title") && !json.Contains("Process") && !json.Contains("Handle"));
+            using var engine = new ClickEngine(new Input(), new Gate()); Check(!engine.Enabled && store.Find(key, []) is null);
+            store.Remove(key); Check(store.Find(key, [profile]) is null);
+        }));
+        test("Application associations reject malformed files and support explicit removal of all", () => WithDirectory(dir =>
+        {
+            string path = Path.Combine(dir, "apps.json"), key = ApplicationProfiles.Identity(Path.GetFullPath("artifacts/app.exe"));
+            File.WriteAllText(path, "{\"Version\":1,\"Associations\":null}"); var store = new ApplicationProfiles(path);
+            Check(store.Find(key, []) is null && store.Warning is not null); Invalid(() => store.Associate("invalid", Guid.NewGuid()));
+            store.Clear(); var profile = new TimingProfile(); store.Associate(key, profile.Id); Check(store.Find(key, [profile]) == profile.Id);
+            store.Clear(); Check(store.Find(key, [profile]) is null);
+        }));
+        test("Application association memory and file growth are bounded", () => WithDirectory(dir =>
+        {
+            var store = new ApplicationProfiles(Path.Combine(dir, "apps.json")); var profile = new TimingProfile();
+            for (int i = 0; i < 100; i++) store.Associate(i.ToString("x64"), profile.Id);
+            Invalid(() => store.Associate(100.ToString("x64"), profile.Id));
+            Check(store.Find(99.ToString("x64"), [profile]) == profile.Id); store.Clear(); Check(store.Find(99.ToString("x64"), [profile]) is null);
+        }));
     }
     private static void WithDirectory(Action<string> action)
     { string dir = Path.GetFullPath(Path.Combine("artifacts", "advanced-test-" + Guid.NewGuid())); Directory.CreateDirectory(dir); try { action(dir); } finally { Directory.Delete(dir, true); } }
