@@ -141,6 +141,20 @@ internal static class AdvancedControlTests
             Invalid(() => store.Associate(100.ToString("x64"), profile.Id));
             Check(store.Find(99.ToString("x64"), [profile]) == profile.Id); store.Clear(); Check(store.Find(99.ToString("x64"), [profile]) is null);
         }));
+        test("Timing scope computes actual spread standard deviation and delay", () =>
+        {
+            var summary = TimingScopeSummary.Calculate([new(1, 50, 60, 60), new(2, 70, 80, 140)]);
+            Check(summary.ScheduledMean == 60 && summary.MeasuredMean == 70 && summary.Minimum == 60 && summary.Maximum == 80 && summary.StandardDeviation == 10 && summary.MeanDelay == 10);
+            Check(TimingScopeSummary.Calculate([]) == default); Invalid(() => TimingScopeSummary.Calculate([new(1, double.NaN, 10, 10)]));
+        });
+        test("Scope observes isolated seeded logical simulation without live input dependencies", () =>
+        {
+            var a = new VariableIntervalSequence(new(5, 20), 99); var b = new VariableIntervalSequence(new(5, 20), 99);
+            Check(Enumerable.Range(0, 50).All(_ => a.NextMilliseconds() == b.NextMilliseconds()));
+            using var simulation = new VariableTimingSimulation(); var task = simulation.Start(new(20, 20), 42, TimeSpan.FromMilliseconds(180)); Check(task.Wait(2000));
+            Check(TimingScopeSummary.Calculate(simulation.Snapshot.Events).Count > 0);
+            Check(typeof(VariableTimingSimulation).GetConstructors().All(c => c.GetParameters().Length == 0));
+        });
     }
     private static void WithDirectory(Action<string> action)
     { string dir = Path.GetFullPath(Path.Combine("artifacts", "advanced-test-" + Guid.NewGuid())); Directory.CreateDirectory(dir); try { action(dir); } finally { Directory.Delete(dir, true); } }
