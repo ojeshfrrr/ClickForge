@@ -248,6 +248,7 @@ public partial class MainWindow
             Width = 1280; Height = 920;
             await RunDailyDiagnosticsAsync(results, output);
             await RunLightweightDiagnosticsAsync(results);
+            await RunAdvancedDiagnosticsAsync(results, output);
             Width = 1280; Height = 920;
             await Task.Delay(1500); // Exclude resize, popup and software-render warmup.
             using var process = System.Diagnostics.Process.GetCurrentProcess();
@@ -267,11 +268,13 @@ public partial class MainWindow
         {
             engine.Stop();
             results.Add("NOTE Mouse input mocked. Routed shortcut tests do not prove physical global-key delivery.");
-            if (exit == 0) { engine.Start(); results.Add("PASS Exit requested while the mock click worker is active"); }
+            if (exit == 0) { ShowCompact(); ShowPalette(); engine.Start(); results.Add("PASS Exit requested while the mock click worker is active"); }
             PrepareExit();
             ExecuteTrayCommand(TrayCommand.Exit); ExecuteTrayCommand(TrayCommand.Exit);
             if (closing && !engine.Enabled && tray is null) results.Add("PASS Explicit and repeated Exit complete shared engine, hotkey and tray cleanup");
             else { results.Add("FAIL Exit cleanup incomplete"); exit = 1; }
+            if (compactWindow is null && paletteWindow is null) results.Add("PASS Shutdown closes compact controls and command palette through shared cleanup");
+            else { results.Add("FAIL Advanced windows survived shutdown"); exit = 1; }
             results.Add(exit == 0 ? "RESULT UI checks completed successfully" : "RESULT UI checks failed");
             File.WriteAllLines(output, results);
             Application.Current.Shutdown(exit);
