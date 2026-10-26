@@ -78,6 +78,15 @@ public partial class MainWindow
         var content = (StackPanel)advancedControls.Content;
         Press(content.Children.OfType<Button>().Single(b => b.Content as string == "Clear safety timeline"));
         Check(engine.Timeline.Entries.Length == 0 && safetyEvents.Items.Count == 0, "Clear timeline button clears bounded in-memory history and visible entries");
+        using (var test = new DiagnosticTestWindowScope(this))
+        {
+            var window = test.Window; window.ModeSelector.SelectedIndex = 1; window.MinimumInput.Text = "20"; window.MaximumInput.Text = "20"; window.SeedInput.Text = "42";
+            long before = engine.Clicks; window.StartTest(); await Until(() => window.ScopeSampleCount >= 3);
+            Check(window.ScopeSampleCount > 0 && window.ScopeSummary.ScheduledMean == 50 && window.ScopeSummary.MeanDelay >= 0 && !engine.Enabled && engine.Clicks == before,
+                "Safe-test scope draws scheduled and measured logical samples without activating live input");
+            RenderDiagnostic(window, Path.Combine(root, "ui-timing-scope.png")); window.StopTest(); int samples = window.VariableSnapshot.Events.Length; await Task.Delay(80);
+            Check(!window.VariableSnapshot.Running && window.VariableSnapshot.Events.Length == samples, "Scope simulation cancellation stops further logical events");
+        }
         CpsInput.Text = "10"; durationLimitInput.IsChecked = pairLimitInput.IsChecked = false; ApplyLimits();
         RenderDiagnostic(this, Path.Combine(root, "ui-advanced-controls.png"));
         RenderDiagnostic((FrameworkElement)advancedControls.Content, Path.Combine(root, "ui-advanced-features.png"));
