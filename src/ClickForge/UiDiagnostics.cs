@@ -236,6 +236,7 @@ public partial class MainWindow
             updateWindow.Close(); updateClient.Report(ClickForge.Core.Updates.UpdateState.Idle, "Check for a newer stable release.");
             Width = 1280; Height = 920;
             await RunDailyDiagnosticsAsync(results, output);
+            await RunLightweightDiagnosticsAsync(results);
             Width = 1280; Height = 920;
             await Task.Delay(1500); // Exclude resize, popup and software-render warmup.
             using var process = System.Diagnostics.Process.GetCurrentProcess();
