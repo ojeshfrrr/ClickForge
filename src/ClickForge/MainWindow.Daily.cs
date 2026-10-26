@@ -91,10 +91,8 @@ public partial class MainWindow
         }
     }
     private string EffectiveState => engine.State == EngineState.Paused && !engine.IsPaused && engine.Enabled ? "Waiting for target" : engine.State switch { EngineState.Running => settings.Button==ClickButton.CustomKey?"Sending keys":"Clicking", EngineState.Error => "Error", EngineState.Paused => "Paused", _ => "Stopped" };
-    private void UpdateDailyStatus()
+    private void UpdateActivityAndTray()
     {
-        if (closing) return;
-        RenderInspector();
         string state = EffectiveState;
         if (state != lastActivityState)
         {
@@ -104,6 +102,13 @@ public partial class MainWindow
             lastActivityState = state;
         }
         tray?.Update(state, engine.Enabled, engine.IsPaused, shortcutsReady && settings.Mode == ActivationMode.Toggle && activeTest is null && profilesWindow is null && preferencesWindow is null && targetWindow is null && customKeyWindow is null);
+    }
+    private void UpdateDailyStatus()
+    {
+        if (closing) return;
+        RenderInspector();
+        UpdateActivityAndTray();
+        string state = EffectiveState;
         if (!engine.Enabled && (profilesWindow?.IsVisible == true || preferencesWindow?.IsVisible == true || targetWindow?.IsVisible == true || customKeyWindow?.IsVisible == true))
         { StartButton.IsEnabled = false; StartButton.ToolTip = "Close configuration views before activating clicking."; }
         else StartButton.IsEnabled = shortcutsReady && (settings.Mode == ActivationMode.Toggle || engine.Enabled);
