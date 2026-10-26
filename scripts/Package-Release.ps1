@@ -62,6 +62,15 @@ Open Profiles to create, apply, import or export a version 1 JSON profile.
 Applying profiles stops input and never changes the selected target.
 Settings includes opt-in minimize/close to tray and redacted diagnostics.
 Both tray preferences default off; hiding stops clicking. Tray Exit quits.
+Expand Global shortcuts & advanced controls, then Advanced session controls,
+for optional wall-clock/pair auto-stop limits, application-profile suggestions
+and the private in-memory safety timeline. Limits include pauses and target waits.
+Ctrl+K opens commands; navigation-footer buttons open commands or compact controls.
+Opening/closing compact controls stops input; activate explicitly afterward.
+Safe Click Test's logical simulator includes a scheduled/measured timing scope.
+Application associations store executable-path fingerprints and profile IDs in
+application-profiles.json in the existing user-data directory. Remove a mapping
+or clear all through Advanced session controls. Matching never starts input.
 An interrupted update retains a recovery journal and backup under that folder's
 Updates subdirectory. See docs/UPDATING.md in the source repository for recovery.
 A checksum from the release account is not a digital publisher signature.
