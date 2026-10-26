@@ -13,9 +13,14 @@ public partial class MainWindow
     private Window? targetWindow;
     private Guid? displayedProfile;
     private TimingProfile[] quickProfiles = [];
+    private (bool, bool, long, long, double)? lastSessionDisplay;
     private void RenderSessionStatistics()
     {
         var session = engine.Session;
+        var display = (session.HasStarted, session.TimerRunning, session.Elapsed.Ticks / TimeSpan.TicksPerSecond,
+            session.InputPairsSent, Math.Round(session.MeasuredAverageCps, 2));
+        if (lastSessionDisplay == display) return;
+        lastSessionDisplay = display;
         SessionElapsedText.Text = $"{(int)session.Elapsed.TotalHours:00}:{session.Elapsed.Minutes:00}:{session.Elapsed.Seconds:00}";
         SessionPairsText.Text = session.InputPairsSent.ToString("N0");
         SessionAverageText.Text = session.MeasuredAverageCps.ToString("0.00");
