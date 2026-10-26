@@ -26,7 +26,8 @@ public partial class MainWindow : Window
     private long displayedClicks, nextCounterUpdate;
     private (EngineState, bool, bool, long, int, ActivationMode, bool, bool, bool, bool, int, int, int)? lastDisplay;
     private readonly string? previewPath = GetPreviewPath();
-    private readonly string? selfTestPath = GetArgument("--ui-self-test") ?? GetArgument("--ui-interactive-test");
+    private readonly string? selfTestPath = GetArgument("--ui-self-test") ?? GetArgument("--ui-interactive-test") ?? GetArgument("--performance-test");
+    private readonly bool performanceTest = GetArgument("--performance-test") is not null;
     private readonly bool interactiveTest = GetArgument("--ui-interactive-test") is not null;
     private static string? GetArgument(string name)
     {
@@ -72,6 +73,7 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         ContentRendered += (_, _) =>
         {
+            if (performanceTest) { _ = RunPerformanceTestAsync(selfTestPath!); return; }
             if (interactiveTest) { Title = "ClickForge · UI verification (mock input)"; MessageText.Text = "UI verification: input is mocked and configuration is disposable."; return; }
             if (selfTestPath is not null) File.AppendAllText(selfTestPath, "WPF content rendered" + Environment.NewLine);
             if (selfTestPath is not null) { _ = RunUiSelfTestAsync(selfTestPath); return; }

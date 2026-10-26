@@ -21,7 +21,9 @@ public partial class App : Application
             System.IO.File.WriteAllText(diagnostic, "STARTING WPF diagnostics" + Environment.NewLine);
             DispatcherUnhandledException += (_, failure) => { System.IO.File.AppendAllText(diagnostic, "FAIL unhandled UI error: " + failure.Exception); failure.Handled = true; Shutdown(1); };
         }
-        if (!e.Args.Contains("--ui-self-test") && !e.Args.Contains("--ui-interactive-test") && !e.Args.Contains("--render-preview"))
+        int performanceIndex = Array.IndexOf(e.Args, "--performance-test");
+        bool performanceDiagnostic = performanceIndex >= 0 && performanceIndex + 1 < e.Args.Length;
+        if (!e.Args.Contains("--ui-self-test") && !e.Args.Contains("--ui-interactive-test") && !performanceDiagnostic && !e.Args.Contains("--render-preview"))
         {
             instance = new("", () => Dispatcher.BeginInvoke(new Action(() => (MainWindow as MainWindow)?.RestoreWindow())));
             if (!instance.IsPrimary) { Shutdown(); return; }
