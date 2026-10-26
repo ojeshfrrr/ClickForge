@@ -37,6 +37,22 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
     private long clicks;
     private ClickButton button;
     private int customKey;
+    private SessionLimits limits, sessionLimits;
+    public SessionLimits Limits { get { lock (gate) return limits; } }
+    public SessionLimits ActiveSessionLimits { get { lock (gate) return sessionLimits; } }
+    private SessionEventKind? lastStopReason;
+    public SessionEventKind? LastStopReason { get { lock (gate) return lastStopReason; } }
+    public void ConfigureLimits(SessionLimits value)
+    {
+        value.Validate();
+        lock (gate)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (limits == value) return;
+            if (enabled) StopWithReason(SessionEventKind.ConfigurationStop);
+            limits = value;
+        }
+    }
     public int CustomKey { get { lock(gate) return customKey; } }
     public ClickButton Button
     {
@@ -87,6 +103,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
             if (timingMode == ClickTimingMode.Variable && variableTarget?.CanActivate != true)
                 throw new InvalidOperationException("Select an eligible target window, then activate from ClickForge or that window. Roblox must be a verified client.");
             session.Start(clicks);
+            sessionLimits = limits; lastStopReason = null;
             enabled = true; paused = false; error = null;
             state = EngineState.Paused;
             worker ??= Task.Factory.StartNew(Loop, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -94,10 +111,14 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
         }
     }
     public void Stop()
+        => StopWithReason(SessionEventKind.Stopped);
+    public void EmergencyStop() => StopWithReason(SessionEventKind.EmergencyStop);
+    private void StopWithReason(SessionEventKind reason)
     {
         lock (gate)
         {
             if (disposed) return;
+            if (enabled || reason == SessionEventKind.EmergencyStop) { lastStopReason = reason; }
             enabled = false; paused = false;
             session.Stop(clicks);
             if (state != EngineState.Error) state = EngineState.Stopped;
@@ -114,7 +135,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
             wake.Set();
         }
     }
-    private void Fail(Exception e) { enabled = false; paused = false; session.Stop(clicks); state = EngineState.Error; error = e.Message; }
+    private void Fail(Exception e) { lastStopReason = SessionEventKind.InputError; enabled = false; paused = false; session.Stop(clicks); state = EngineState.Error; error = e.Message; }
     private void ReleaseSafely() { try { input.Release(); } catch (Exception e) { Fail(e); } }
     private void Loop()
     {
@@ -131,7 +152,8 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
                 if (disposed) return;
                 try
                 {
-                    if (enabled && !ActivationStillValid()) { enabled = false; paused = false; session.Stop(clicks); state = EngineState.Stopped; ReleaseSafely(); }
+                    if (enabled && sessionLimits != default && sessionLimits.Reached(session.Snapshot(clicks)) is { } limitReason) StopWithReason(limitReason);
+                    if (enabled && !ActivationStillValid()) StopWithReason(SessionEventKind.ActivationEnded);
                     bool active = enabled && !paused && (timingMode == ClickTimingMode.Variable ? variableTarget?.CanClick == true : target.CanClick);
                     if (!active)
                     {
@@ -153,12 +175,19 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
                         if (schedule.WaitMilliseconds(now) == 0)
                         {
                             // Stop and pause share this lock: no new pair can begin after either returns.
+                            if (sessionLimits != default && sessionLimits.Reached(session.Snapshot(clicks)) is { } beforePair)
+                            { StopWithReason(beforePair); wasActive = false; wait = Timeout.Infinite; continue; }
                             input.Click(button,customKey); Interlocked.Increment(ref clicks);
+                            if (sessionLimits != default && sessionLimits.Reached(session.Snapshot(clicks)) is { } reached) { StopWithReason(reached); wasActive = false; }
                             if (timingMode == ClickTimingMode.Variable) schedule.AdvanceInterval(clock.Elapsed.TotalMilliseconds, sequence.NextMilliseconds());
                             else schedule.Advance(clock.Elapsed.TotalMilliseconds, cps);
                         }
                         wait = schedule.WaitMilliseconds(clock.Elapsed.TotalMilliseconds);
                     }
+                    // Enforce wall-clock limits during long intervals, pauses and
+                    // target waits using this same worker, never a competing loop.
+                    if (enabled && sessionLimits.Seconds is { } seconds)
+                        wait = Math.Min(wait < 0 ? 50 : wait, (int)Math.Clamp(Math.Ceiling(seconds * 1000d - session.Snapshot(clicks).Elapsed.TotalMilliseconds), 1, 50));
                 }
                 catch (Exception e) { Fail(e); ReleaseSafely(); wasActive = false; wait = Timeout.Infinite; }
             }
