@@ -98,6 +98,19 @@ internal static class AdvancedControlTests
             var copy = timeline.Entries; copy[0] = default; Check(timeline.Entries[0].Time != default);
             long version = timeline.Version; timeline.Clear(); Check(timeline.Version > version && timeline.Entries.Length == 0);
         });
+        test("Settings persist limits and old settings default to unlimited", () => WithDirectory(dir =>
+        {
+            string path = Path.Combine(dir, "settings.json"); var store = new SettingsService(path);
+            var settings = new Settings { MaximumSessionSeconds = 60, MaximumSessionPairs = 150 }; store.Save(settings); Check(store.Load() == settings);
+            File.WriteAllText(path, "{\"Cps\":19}"); Check(store.Load().MaximumSessionSeconds is null && store.Load().MaximumSessionPairs is null);
+            File.WriteAllText(path, "{\"MaximumSessionPairs\":-1}"); Check(store.Load() == new Settings() && store.Warning is not null);
+        }));
+        test("Profile application preserves global session limits", () =>
+        {
+            using var engine = new ClickEngine(new Input(), new Gate()); var settings = new Settings { MaximumSessionSeconds = 70, MaximumSessionPairs = 18 };
+            engine.ConfigureLimits(new(70, 18)); var next = TimingProfile.Capture(new Settings { Cps = 15 }, "Test").Apply(settings, engine);
+            Check(next.MaximumSessionSeconds == 70 && next.MaximumSessionPairs == 18 && engine.Limits == new SessionLimits(70, 18) && !engine.Enabled);
+        });
     }
     private static void WithDirectory(Action<string> action)
     { string dir = Path.GetFullPath(Path.Combine("artifacts", "advanced-test-" + Guid.NewGuid())); Directory.CreateDirectory(dir); try { action(dir); } finally { Directory.Delete(dir, true); } }
