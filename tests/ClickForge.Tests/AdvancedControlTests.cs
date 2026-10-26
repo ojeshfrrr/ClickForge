@@ -155,6 +155,19 @@ internal static class AdvancedControlTests
             Check(TimingScopeSummary.Calculate(simulation.Snapshot.Events).Count > 0);
             Check(typeof(VariableTimingSimulation).GetConstructors().All(c => c.GetParameters().Length == 0));
         });
+        test("Compact controls reflect disabled Hold waiting pause and config state", () =>
+        {
+            Check(!ControlAvailability.For(false, false, ActivationMode.Toggle, false, false).StartEnabled);
+            Check(!ControlAvailability.For(false, false, ActivationMode.Hold, true, false).StartEnabled);
+            Check(ControlAvailability.For(true, true, ActivationMode.Toggle, true, true).StartEnabled);
+            Check(ControlAvailability.For(true, true, ActivationMode.Toggle, true, false).PauseLabel == "Resume");
+            Check(!ControlAvailability.For(false, false, ActivationMode.Toggle, true, true).StartEnabled);
+        });
+        test("Palette speed grammar validates bounds and ignores arbitrary text", () =>
+        {
+            Check(PaletteInput.TryCps(" CPS  50 ", out int cps) && cps == 50);
+            foreach (var value in new[] { "cps 0", "cps 51", "cps -1", "cps NaN", "cps 5.5", "cps 10 start", "start", "10" }) Check(!PaletteInput.TryCps(value, out _));
+        });
     }
     private static void WithDirectory(Action<string> action)
     { string dir = Path.GetFullPath(Path.Combine("artifacts", "advanced-test-" + Guid.NewGuid())); Directory.CreateDirectory(dir); try { action(dir); } finally { Directory.Delete(dir, true); } }
