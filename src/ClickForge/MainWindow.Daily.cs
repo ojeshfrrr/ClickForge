@@ -150,14 +150,14 @@ public partial class MainWindow
             if (settings.ActiveProfileId == id) { engine.Stop(); settings = settings with { ActiveProfileId = null }; Persist(); }
             UpdateProfileLabel();
         }, () => { history.Add(ActivityKind.ProfileImported); tray?.Notify("Profile imported. Select and apply it to use it."); }) { Owner = this };
-        profilesWindow.Closed += (_, _) => { profilesWindow = null; UpdateProfileLabel(); }; profilesWindow.Show();
+        profilesWindow.Closed += (_, _) => { profilesWindow = null; UpdateProfileLabel(); lastDisplay = null; UpdateStatus(); }; profilesWindow.Show();
     }
     private void SettingsClicked(object sender, RoutedEventArgs e)
     {
         engine.Stop(); activeTest?.StopTest();
         if (preferencesWindow is not null) { preferencesWindow.Activate(); return; }
         preferencesWindow = new(() => settings, value => { settings = value; return Persist(); }, history, DiagnosticReport, () => tray?.Available == true, () => { engine.Stop(); settings = new Settings { ActiveProfileId = settings.ActiveProfileId, Width = settings.Width, Height = settings.Height }; LoadControls(); if (bindings is not null) RegisterShortcuts(); Persist(); UpdateProfileLabel(); UpdateStatus(); }) { Owner = this };
-        preferencesWindow.Closed += (_, _) => preferencesWindow = null; preferencesWindow.Show();
+        preferencesWindow.Closed += (_, _) => { preferencesWindow = null; lastDisplay = null; UpdateStatus(); }; preferencesWindow.Show();
     }
     private string DiagnosticReport() => $"ClickForge {InstalledVersion.Value.Split('+')[0]}\nWindows {Environment.OSVersion.Version}\nEngine: {EffectiveState}\nTiming: {settings.TimingMode}\nProfile: {(settings.ActiveProfileId is null ? "Custom configuration" : "Selected (name redacted)")}\nShortcuts: {(shortcutsReady ? "Registered or diagnostic routing enabled" : "Unavailable; review shortcut configuration")}\nTray: {(tray?.Available == true ? "Available" : "Unavailable")}\nUpdates: {updateClient.Status.State}\nPreferences: {(persistenceFailed ? "Save failed" : "No save failure reported")}\nPhysical global-key delivery and target input acceptance are not measured here.\n\nRecent activity (profile names, paths and target identities omitted):\n{history.RedactedReport()}";
 }

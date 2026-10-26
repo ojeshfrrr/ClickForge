@@ -195,7 +195,7 @@ public partial class MainWindow : Window
         engine.Stop();
         activeTest = new TestWindow((SafeTestMode)SafeTestModeInput.SelectedIndex, settings.Button,settings.CustomKey) { Owner = this };
         try { activeTest.ShowDialog(); }
-        finally { activeTest = null; engine.Stop(); }
+        finally { activeTest = null; engine.Stop(); UpdateStatus(); }
     }
     private void UpdateStatus()
     {

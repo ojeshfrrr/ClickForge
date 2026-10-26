@@ -50,6 +50,7 @@ public partial class MainWindow
         targetWindow.Closed += (_, _) =>
         {
             ((ScrollViewer)targetWindow.Content).Content = null; InspectorHost.Content = InspectorContent; targetWindow = null;
+            lastDisplay = null; UpdateStatus();
         };
         targetWindow.Show(); DesktopTargetInput.Focus();
     }
