@@ -38,6 +38,8 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
     private ClickButton button;
     private int customKey;
     private SessionLimits limits, sessionLimits;
+    private bool? lastTargetEligible;
+    public SafetyTimeline Timeline { get; } = new(timeProvider);
     public SessionLimits Limits { get { lock (gate) return limits; } }
     public SessionLimits ActiveSessionLimits { get { lock (gate) return sessionLimits; } }
     private SessionEventKind? lastStopReason;
@@ -82,6 +84,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
             ObjectDisposedException.ThrowIf(disposed, this);
             if (timingMode == mode && range == variableRange) return;
             // Configuration changes form a stop barrier. A fresh activation is explicit.
+            if (enabled) Timeline.Record(SessionEventKind.ConfigurationStop);
             enabled = false; paused = false; session.Stop(clicks); ReleaseSafely();
             if (state != EngineState.Error) state = EngineState.Stopped;
             timingMode = mode; range = variableRange; sequence = new(variableRange); revision++;
@@ -103,7 +106,8 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
             if (timingMode == ClickTimingMode.Variable && variableTarget?.CanActivate != true)
                 throw new InvalidOperationException("Select an eligible target window, then activate from ClickForge or that window. Roblox must be a verified client.");
             session.Start(clicks);
-            sessionLimits = limits; lastStopReason = null;
+            sessionLimits = limits; lastStopReason = null; lastTargetEligible = null;
+            Timeline.Record(SessionEventKind.Started);
             enabled = true; paused = false; error = null;
             state = EngineState.Paused;
             worker ??= Task.Factory.StartNew(Loop, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -118,7 +122,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
         lock (gate)
         {
             if (disposed) return;
-            if (enabled || reason == SessionEventKind.EmergencyStop) { lastStopReason = reason; }
+            if (enabled || reason == SessionEventKind.EmergencyStop) { Timeline.Record(reason); lastStopReason = reason; }
             enabled = false; paused = false;
             session.Stop(clicks);
             if (state != EngineState.Error) state = EngineState.Stopped;
@@ -131,11 +135,12 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
         {
             if (!enabled || disposed) return;
             paused = !paused;
+            Timeline.Record(paused ? SessionEventKind.Paused : SessionEventKind.Resumed);
             if (paused) { state = EngineState.Paused; ReleaseSafely(); }
             wake.Set();
         }
     }
-    private void Fail(Exception e) { lastStopReason = SessionEventKind.InputError; enabled = false; paused = false; session.Stop(clicks); state = EngineState.Error; error = e.Message; }
+    private void Fail(Exception e) { if (state != EngineState.Error) Timeline.Record(SessionEventKind.InputError); lastStopReason = SessionEventKind.InputError; enabled = false; paused = false; session.Stop(clicks); state = EngineState.Error; error = e.Message; }
     private void ReleaseSafely() { try { input.Release(); } catch (Exception e) { Fail(e); } }
     private void Loop()
     {
@@ -154,7 +159,15 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
                 {
                     if (enabled && sessionLimits != default && sessionLimits.Reached(session.Snapshot(clicks)) is { } limitReason) StopWithReason(limitReason);
                     if (enabled && !ActivationStillValid()) StopWithReason(SessionEventKind.ActivationEnded);
-                    bool active = enabled && !paused && (timingMode == ClickTimingMode.Variable ? variableTarget?.CanClick == true : target.CanClick);
+                    bool eligible = false;
+                    if (enabled && !paused)
+                    {
+                        eligible = timingMode == ClickTimingMode.Variable ? variableTarget?.CanClick == true : target.CanClick;
+                        if (lastTargetEligible != eligible && (!eligible || lastTargetEligible == false))
+                            Timeline.Record(eligible ? SessionEventKind.TargetRestored : SessionEventKind.TargetLost);
+                        lastTargetEligible = eligible;
+                    }
+                    bool active = enabled && !paused && eligible;
                     if (!active)
                     {
                         if (wasActive) ReleaseSafely();
@@ -200,6 +213,7 @@ public sealed class ClickEngine(IMouseInput input, ITargetGate target, IVariable
         lock (gate)
         {
             if (disposed) return;
+            Timeline.Record(SessionEventKind.Shutdown);
             enabled = false; paused = false; disposed = true;
             session.Stop(clicks);
             ReleaseSafely(); if (state != EngineState.Error) state = EngineState.Stopped;
