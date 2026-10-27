@@ -147,7 +147,7 @@ public partial class MainWindow
             Check(InspectorHost.Visibility == Visibility.Visible && RailColumn.Width.Value == 170, "Wide obsidian shell exposes rail and genuine target/profile inspector");
         else results.Add("UNAVAILABLE Wide inspector layout: Windows capped the requested 1280-DIP window on this display.");
         Check(desktopTarget.Snapshot is null && InspectorIdentity.Text == "No window selected" && InspectorValidity.Text == "Not selected", "Target inspector never fabricates a selected or verified window");
-        Check(((SolidColorBrush)FindResource("Base")).Color == Color.FromRgb(8, 9, 11) && ((SolidColorBrush)FindResource("Accent")).Color == Color.FromRgb(231, 196, 119), "Obsidian and champagne design tokens replace the blue palette");
+        Check(((SolidColorBrush)FindResource("Base")).Color == Color.FromRgb(18, 20, 23) && ((SolidColorBrush)FindResource("Accent")).Color == Color.FromRgb(231, 196, 119), "Calmer dark surfaces preserve the existing champagne accent");
         Check(StartLabel.Foreground == FindResource("Ink") && FixedTimingInput.Style == FindResource("TimingSegment"), "Gold primary action and timing selector use high-contrast reusable styles");
         var quick = profiles.Create(settings, "Quick profile check"); RefreshQuickProfiles(); QuickProfileInput.SelectedItem = quick;
         Check(settings.ActiveProfileId == quick.Id && !engine.Enabled, "Inspector profile selector applies through the existing stop barrier");
