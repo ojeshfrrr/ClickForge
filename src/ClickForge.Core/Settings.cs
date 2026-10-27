@@ -16,6 +16,7 @@ public sealed record Settings
     public int PauseKey { get; init; } = 0x76;
     public int StopKey { get; init; } = 0x77;
     public bool SideButtonToggles { get; init; }
+    public MouseSetup MouseSetup { get; init; }
     public bool RobloxOnly { get; init; } = true;
     public double Width { get; init; } = 1280;
     public double Height { get; init; } = 920;
@@ -34,6 +35,7 @@ public sealed record Settings
         if (!Enum.IsDefined(TimingMode)) throw new ArgumentException("Invalid click speed mode.");
         _ = new CpsRange(MinimumCps, MaximumCps);
         if (!Enum.IsDefined(Mode)) throw new ArgumentException("Invalid activation mode.");
+        if (!Enum.IsDefined(MouseSetup)) throw new ArgumentException("Choose a supported mouse setup.");
         int[] keys = [ActivateKey, PauseKey, StopKey];
         if (keys.Any(k => !ShortcutKeys.IsValid(k))) throw new ArgumentException("Choose F1–F11, Mouse 4 (Back), or Mouse 5 (Forward).");
         if (keys.Distinct().Count() != 3) throw new ArgumentException("Each shortcut must use a different key.");
