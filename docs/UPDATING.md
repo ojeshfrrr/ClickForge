@@ -1,6 +1,6 @@
 # Updating ClickForge
 
-## v1.6 update flow
+## v1.6.1 update flow
 
 Open **Updates**, choose **Check for updates**, then **Download update**. After the
 package is verified, **Install and restart** becomes available and still asks for
@@ -18,7 +18,7 @@ Existing updater-enabled versions use the same public channel without an account
 Settings, profiles and the Bedwars `MouseSetup` preference are retained by both
 upgrade and rollback. The running request is never persisted. An install button
 cannot be enabled merely by a status label without an actual verified staged
-package. See [v1.6 release verification](RELEASE-v1.6.0.md).
+package. See [v1.6.1 release verification](RELEASE-v1.6.1.md).
 
 ## Versions and the first updater-enabled build
 

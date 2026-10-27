@@ -44,6 +44,21 @@ settings, updates, target inspection, tray and shutdown are preserved.
 
 `./build.ps1 -SkipPackage -BuildDirectory artifacts/v1.6.0-review`
 
+This records the local feature review. The unpublished v1.6.0 attempt later
+exposed a test assumption on GitHub's 1024×720 desktop: it expected a full
+1000×880 window even when Windows capped it. v1.6.1 keeps the full-size no-scroll
+assertion when that size is available, sizes to the actual work area otherwise,
+and explicitly verifies scrolling and pinned Emergency Stop on the smaller view.
+Neither target checks nor production input behavior changed for that correction.
+
+Executed correction review:
+`./build.ps1 -SkipPackage -BuildDirectory artifacts/v1.6.1-display-review`.
+Release builds again passed with zero warnings/errors; **183 core + 38 updater +
+285 WPF checks passed: 506 total**. This includes a local 984×680 window simulation
+of the hosted 1024×720 work area, checking actual scrolling and Emergency Stop
+placement. Full-size no-scroll checks also passed locally. Logs are
+`artifacts/logs/v1.6.1-display-review-build.txt` and the saved release UI logs.
+
 - App/helper Release builds: **zero warnings, zero errors**.
 - **183 core + 38 updater + 283 WPF checks passed: 504 total**.
 - New tests exercise both mappings, legacy/invalid settings, persistence and
@@ -72,9 +87,9 @@ sent into Minecraft, Roblox or a live game. Physical side-button delivery, game
 input acceptance, screen readers and real multi-monitor DPI changes were not
 verified. Existing screenshot-heavy diagnostic CPU variability remains unresolved.
 Packaging instructions and SDK source inclusion were inspected. The tagged
-v1.6.0 workflow separately checks installation, upgrade, shortcuts, uninstall,
+v1.6.1 workflow separately checks installation, upgrade, shortcuts, uninstall,
 the real helper and uploaded assets before publication. See completed workflow
-logs and [release notes](RELEASE-v1.6.0.md) for those results.
+logs and [release notes](RELEASE-v1.6.1.md) for those results.
 
 ## Files changed
 
@@ -99,4 +114,4 @@ logs and [release notes](RELEASE-v1.6.0.md) for those results.
 - `tests/ClickForge.Tests/BedwarsSetupTests.cs` (new)
 - `tests/ClickForge.UpdateTests/Program.cs`
 - `Version.props`, `README.md`, `scripts/Package-Release.ps1`, this report and its
-  screenshot, `docs/UPDATING.md`, and `docs/RELEASE-v1.6.0.md`.
+  screenshot, `docs/UPDATING.md`, and `docs/RELEASE-v1.6.0.md` / `RELEASE-v1.6.1.md`.

@@ -1,5 +1,10 @@
 # ClickForge v1.6.0
 
+**Unpublished candidate:** GitHub blocked this attempt because a full-size UI
+assertion ran on its 1024×720 desktop. No v1.6.0 downloads were published.
+The display-aware check and published update are described in
+[v1.6.1](RELEASE-v1.6.1.md). The original candidate notes follow.
+
 A simpler Home view and separate mouse setups make the existing Windows utility
 easier to use, with a clearer updater and the same single input worker.
 

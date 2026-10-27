@@ -1,12 +1,12 @@
 # ClickForge
 
 A native Windows mouse-click and key-repeat utility built with C# and WPF.
-**v1.6.0** introduces a simpler Home view, separate mouse setups and a clearer
+**v1.6.1** introduces a simpler Home view, separate mouse setups and a clearer
 updater. Choose Regular clicker, the original Mouse buttons layout, or
 **Minecraft Bedwars**: **Front / Mouse 5 → Left**, **Back / Mouse 4 → Right**, both
 Toggle, using an explicitly selected target window. Existing timing modes,
 profiles, target checks, session limits, shortcuts and shutdown safeguards remain.
-See the [release notes](docs/RELEASE-v1.6.0.md) and [setup guide](docs/BEDWARS-SETUP.md).
+See the [release notes](docs/RELEASE-v1.6.1.md) and [setup guide](docs/BEDWARS-SETUP.md).
 
 The dark-and-gold Home view keeps setup and speed visible, puts details behind
 **Session stats** and **More settings**, and pins Start, Pause and Emergency Stop
