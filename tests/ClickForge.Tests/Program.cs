@@ -77,6 +77,7 @@ AdvancedControlTests.Run(Test);
 OutputSelectionTests.Run(Test);
 RightClickTests.Run(Test);
 SideButtonOutputTests.Run(Test);
+BedwarsSetupTests.Run(Test);
 Console.WriteLine($"RESULT {passed} passed; {failed} failed");
 return failed == 0 ? 0 : 1;
 
