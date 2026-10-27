@@ -14,11 +14,12 @@ public sealed class UpdateWindow : Window
     private readonly ProgressBar progress = new() { Height = 5, Margin = new(0, 8, 0, 5), Minimum = 0, Maximum = 100 };
     private readonly TextBlock bytes = new() { FontSize = 12 };
     private readonly Button check = new() { Content = "Check for updates", Margin = new(0, 12, 0, 0) };
-    private readonly Button download = new() { Content = "Update now", Margin = new(0, 0, 7, 0) };
+    private readonly Button download = new() { Content = "Download update", Margin = new(0, 0, 7, 0) };
     private readonly Button install = new() { Content = "Install and restart", Margin = new(0, 10, 0, 0) };
     private readonly Button cancel = new() { Content = "Cancel download", Margin = new(0, 0, 7, 0) };
     private readonly Button later = new() { Content = "Later", Margin = new(7, 0, 0, 0) };
     internal string DisplayedStatus => status.Text;
+    internal bool CanInstall => install.IsEnabled;
     private readonly CancellationTokenSource lifetime = new();
     private CancellationTokenSource? operation;
     public UpdateWindow(UpdateClient client, bool automatic, Action<bool> saveAutomatic, Func<Task> installAction)
@@ -30,6 +31,7 @@ public sealed class UpdateWindow : Window
         var panel = new StackPanel { Margin = new(24) };
         panel.Children.Add(new TextBlock { Text = "Updates", FontSize = 23, FontWeight = FontWeights.SemiBold });
         panel.Children.Add(new TextBlock { Text = "Installed version: " + MainWindow.InstalledVersion.Value.Split('+')[0], Margin = new(0, 10, 0, 0), Foreground = (Brush)FindResource("Muted") });
+        panel.Children.Add(DialogLayout.Text("Check for an update, download it, then install when you're ready.", true));
         var auto = new CheckBox { Content = "Check automatically on startup", IsChecked = automatic, Margin = new(0, 17, 0, 0) };
         auto.Checked += (_, _) => saveAutomatic(true); auto.Unchecked += (_, _) => saveAutomatic(false); panel.Children.Add(auto);
         panel.Children.Add(check); panel.Children.Add(status); panel.Children.Add(latest); panel.Children.Add(notes); panel.Children.Add(progress); panel.Children.Add(bytes);
@@ -56,7 +58,7 @@ public sealed class UpdateWindow : Window
     private void Changed(UpdateStatus value) { if (!Dispatcher.HasShutdownStarted) _ = Dispatcher.BeginInvoke(new Action(() => { if (IsLoaded) Refresh(value); })); }
     private void Refresh(UpdateStatus value)
     {
-        status.Text = $"{value.State switch { UpdateState.Available => "Update available", UpdateState.UpToDate => "Up to date", UpdateState.ReadyToInstall => "Ready to install", UpdateState.Unavailable => "Offline or unavailable", _ => value.State.ToString() }}\n{value.Message}";
+        status.Text = $"{value.State switch { UpdateState.Idle => "Check for a new version", UpdateState.Checking => "Checking for updates", UpdateState.Available => "Update available", UpdateState.Downloading => "Downloading update", UpdateState.Verifying => "Checking the download", UpdateState.UpToDate => "Up to date", UpdateState.ReadyToInstall => "Ready to install", UpdateState.Installing => "Installing update", UpdateState.Restarting => "Restarting ClickForge", UpdateState.Failed => "Update needs attention", UpdateState.Unavailable => "Offline or unavailable", _ => "Update status" }}\n{value.Message}";
         status.SetResourceReference(TextBlock.ForegroundProperty, value.State == UpdateState.Failed ? "Failure" : value.State == UpdateState.Unavailable ? "Warning" : "Text");
         latest.Text = client.Latest is null ? "Latest version: not checked" : "Latest stable version: " + client.Latest.Version;
         notes.Text = client.Latest?.Notes ?? "Published release notes will appear here.";
@@ -66,7 +68,7 @@ public sealed class UpdateWindow : Window
         bool busy = value.State is UpdateState.Checking or UpdateState.Downloading or UpdateState.Verifying or UpdateState.Installing or UpdateState.Restarting;
         check.IsEnabled = !busy; download.IsEnabled = !busy && client.Latest is not null && client.Latest.Version.CompareTo(MainWindow.InstalledVersion) > 0 && value.State != UpdateState.ReadyToInstall;
         later.IsEnabled = value.State is not (UpdateState.Installing or UpdateState.Restarting);
-        install.IsEnabled = value.State == UpdateState.ReadyToInstall; install.Visibility = client.Staged is null ? Visibility.Collapsed : Visibility.Visible;
+        install.IsEnabled = value.State == UpdateState.ReadyToInstall && client.Staged is not null; install.Visibility = client.Staged is null ? Visibility.Collapsed : Visibility.Visible;
         cancel.Visibility = value.State is UpdateState.Downloading or UpdateState.Verifying or UpdateState.Checking ? Visibility.Visible : Visibility.Collapsed;
     }
 }
