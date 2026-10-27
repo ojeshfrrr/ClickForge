@@ -48,11 +48,14 @@ Global shortcuts also support Mouse 4 (Back) and Mouse 5 (Forward).
 Beside Click speed, select Input type: Mouse or Keyboard.
 Mouse output: Left, Mouse 4 (Back), Mouse 5 (Forward), or Right.
 Keyboard output captures one supported key; shortcut conflicts are rejected.
-For simple controls, open Hotkeys > Mouse controls > Apply mouse setup.
-Mouse 4 (Back) toggles Left; Mouse 5 (Forward) toggles Right. The same button
-stops input; the other switches the single worker. Both use Toggle mode.
-Setup selects F6/F7/F8 while keeping speed and target restrictions. Side-button
-assignments default off. Opening/closing the simple window stops input.
+On Home, choose Regular clicker, Mouse buttons, or Minecraft Bedwars.
+Mouse buttons: Back (Mouse 4) toggles Left; Front (Mouse 5) toggles Right.
+Minecraft Bedwars: Front (Mouse 5) toggles Left; Back (Mouse 4) toggles Right.
+Bedwars requires you to choose the target window; it must be in front and under
+the pointer. Your regular-clicker Roblox restriction preference is kept.
+The same side button stops input; the other switches the single worker.
+Both use Toggle. Setup selects F6/F7/F8 while keeping speed. Nothing auto-starts.
+Small view opens simple controls; More settings contains shortcuts and limits.
 Changing output stops input. Session statistics count submitted input pairs,
 not target acceptance; elapsed time includes pauses and target waits.
 Clicking starts disabled. Roblox foreground restriction is on by default.
@@ -68,7 +71,7 @@ Open Profiles to create, apply, import or export a version 1 JSON profile.
 Applying profiles stops input and never changes the selected target.
 Settings includes opt-in minimize/close to tray and redacted diagnostics.
 Both tray preferences default off; hiding stops clicking. Tray Exit quits.
-Expand Global shortcuts & advanced controls, then Advanced session controls,
+Expand More settings, then Advanced session controls,
 for optional wall-clock/pair auto-stop limits, application-profile suggestions
 and the private in-memory safety timeline. Limits include pauses and target waits.
 Ctrl+K opens commands; navigation-footer buttons open commands or compact controls.
