@@ -36,12 +36,12 @@ public partial class MainWindow
         var header = new TextBlock { Text = "Advanced session controls" };
         var compact = DialogLayout.Button("Compact panel", ShowCompact); compact.Padding = new(8, 3, 8, 3); compact.Margin = new(0, 0, 8, 0);
         var commands = DialogLayout.Button("Commands · Ctrl+K", ShowPalette); commands.Padding = new(8, 3, 8, 3); commands.Margin = new(0);
-        compact.Content = new System.Windows.Shapes.Path { Data = (Geometry)FindResource("IconWindow"), Stroke = (Brush)FindResource("Accent"), StrokeThickness = 1.5, Width = 17, Height = 17, Stretch = Stretch.Uniform };
-        commands.Content = new TextBlock { Text = ">_", FontFamily = new("Consolas"), FontSize = 14, Foreground = (Brush)FindResource("Accent") };
+        compact.Content = "Small window";
+        commands.Content = "Find a command";
         compact.ToolTip = "Open compact control panel"; commands.ToolTip = "Command palette · Ctrl+K";
-        foreach (var button in new[] { compact, commands }) { button.Padding = new(3); button.Width = 28; button.Height = 28; button.MinHeight = 0; button.Margin = new(0, 0, 6, 8); }
-        var footerActions = new WrapPanel(); footerActions.Children.Add(compact); footerActions.Children.Add(commands); RailFooter.Children.Insert(0, footerActions);
+        var footerActions = new WrapPanel(); footerActions.Children.Add(compact); footerActions.Children.Add(commands);
         var content = new StackPanel { Margin = new(0, 12, 0, 0) };
+        content.Children.Add(footerActions);
         content.Children.Add(DialogLayout.Text("Session auto-stop", false));
         content.Children.Add(DialogLayout.Text("Duration includes manual pauses and target waits. Either applied limit stops input. Only a new explicit activation resets progress.", true));
         var fields = new Grid(); fields.ColumnDefinitions.Add(new()); fields.ColumnDefinitions.Add(new());
@@ -70,7 +70,7 @@ public partial class MainWindow
         limitSummary.Visibility = Visibility.Collapsed;
         container.Children.Insert(container.Children.IndexOf(MessageText), limitSummary);
         ((StackPanel)ShortcutsExpander.Content).Children.Add(advancedControls);
-        ShortcutsExpander.Header = "Global shortcuts & advanced controls";
+        ShortcutsExpander.Header = "More settings";
         AutomationProperties.SetName(durationValue, "Maximum session seconds, 1 to 86400"); AutomationProperties.SetName(pairValue, "Maximum session input pairs sent, 1 to 1000000000");
         foreach (var input in new[] { durationValue, pairValue }) input.TextChanged += (_, _) => DraftLimitsChanged();
         foreach (var input in new[] { durationLimitInput, pairLimitInput }) { input.Checked += (_, _) => DraftLimitsChanged(); input.Unchecked += (_, _) => DraftLimitsChanged(); }

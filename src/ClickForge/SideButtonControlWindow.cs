@@ -13,6 +13,8 @@ internal sealed class SideButtonControlWindow : Window
     private readonly TextBlock speed = DialogLayout.Text("");
     private readonly TextBlock shortcuts = DialogLayout.Text("", true);
     private readonly TextBlock setupTitle = new();
+    private readonly TextBlock backTitle = new(), frontTitle = new();
+    internal ComboBox SetupSelector { get; } = new() { MinWidth = 200, Margin = new(0, 0, 8, 0) };
     internal ScrollViewer DetailsScroll { get; }
     internal Button SetupControl { get; }
     internal Button LeftControl { get; }
@@ -26,7 +28,7 @@ internal sealed class SideButtonControlWindow : Window
     private bool refreshing;
     private (Settings, bool, bool, EngineState, bool, bool, ClickButton, string, string?)? last;
 
-    internal SideButtonControlWindow(Action setup, Action left, Action right, Action emergency, Action safeTest, Action<int> changeSpeed)
+    internal SideButtonControlWindow(Action setup, Action<MouseSetup> changeSetup, Action left, Action right, Action emergency, Action safeTest, Action<int> changeSpeed)
     {
         DialogLayout.Setup(this, "Mouse controls", 540, 620);
         MinWidth = 440; MinHeight = 500; Height = Math.Min(620, SystemParameters.WorkArea.Height - 40);
@@ -37,11 +39,16 @@ internal sealed class SideButtonControlWindow : Window
         SetupControl = DialogLayout.Button("Apply mouse setup", setup, true);
         setupTitle.SetResourceReference(TextBlock.ForegroundProperty, "Ink"); SetupControl.Content = setupTitle;
         SetupControl.ToolTip = "Enable both assignments in Toggle mode. Set Activate to F6, Pause to F7 and Emergency stop to F8. Keeps speed and target restrictions. Input remains stopped.";
-        content.Children.Add(SetupControl); content.Children.Add(shortcuts);
+        SetupSelector.Items.Add("Mouse buttons"); SetupSelector.Items.Add("Minecraft Bedwars");
+        AutomationProperties.SetName(SetupSelector, "Mouse setup");
+        SetupSelector.SelectionChanged += (_, _) => { if (!refreshing && SetupSelector.SelectedIndex is 0 or 1) changeSetup((MouseSetup)SetupSelector.SelectedIndex); };
+        var setupRow = new Grid(); setupRow.ColumnDefinitions.Add(new()); setupRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        setupRow.Children.Add(SetupSelector); Grid.SetColumn(SetupControl, 1); setupRow.Children.Add(SetupControl);
+        content.Children.Add(setupRow); content.Children.Add(shortcuts);
         LeftControl = DialogLayout.Button("Toggle Left", left);
         RightControl = DialogLayout.Button("Toggle Right", right);
-        content.Children.Add(OutputRow("Back · Mouse 4", "Left click", leftState, LeftControl));
-        content.Children.Add(OutputRow("Front · Mouse 5", "Right click", rightState, RightControl));
+        content.Children.Add(OutputRow("Back · Mouse 4", backTitle, leftState, LeftControl));
+        content.Children.Add(OutputRow("Front · Mouse 5", frontTitle, rightState, RightControl));
         content.Children.Add(DialogLayout.Text("Press again to stop. The other side button switches output.", true));
         content.Children.Add(speed);
         AutomationProperties.SetName(SpeedControl, "Fixed click speed, 1 to 50 CPS");
@@ -58,11 +65,11 @@ internal sealed class SideButtonControlWindow : Window
         Content = root;
     }
 
-    private static Border OutputRow(string source, string output, TextBlock status, Button toggle)
+    private static Border OutputRow(string source, TextBlock title, TextBlock status, Button toggle)
     {
         var grid = new Grid(); grid.ColumnDefinitions.Add(new()); grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         var text = new StackPanel(); var caption = DialogLayout.Text(source, true); caption.FontSize = 11; caption.Margin = new(0); text.Children.Add(caption);
-        var title = DialogLayout.Text(output); title.FontSize = 19; title.FontWeight = FontWeights.SemiBold; title.Margin = new(0, 2, 0, 0);
+        title.FontSize = 19; title.FontWeight = FontWeights.SemiBold; title.Margin = new(0, 2, 0, 0);
         status.Margin = new(0, 3, 0, 0); status.FontSize = 11; text.Children.Add(title); text.Children.Add(status);
         grid.Children.Add(text); Grid.SetColumn(toggle, 1); toggle.VerticalAlignment = VerticalAlignment.Center; toggle.Margin = new(12, 0, 0, 0); grid.Children.Add(toggle);
         var border = new Border { Child = grid, Padding = new(14, 10, 14, 10), Margin = new(0, 5, 0, 3) };
@@ -75,20 +82,23 @@ internal sealed class SideButtonControlWindow : Window
         if (last == display) return; last = display;
         bool assigned = settings.SideButtonToggles && settings.Mode == ActivationMode.Toggle;
         string active = actual == EngineState.Error ? "Error" : enabled ? manualPause ? "Paused" : actual == EngineState.Running ? "Sending" : "Waiting for target" : "Off";
-        leftState.Text = output == ClickButton.Left ? active : "Off";
-        rightState.Text = output == ClickButton.Right ? active : "Off";
+        var back = SideButtonOutputs.OutputFor(SideButtonOutputs.LeftId, settings.MouseSetup);
+        var front = SideButtonOutputs.OutputFor(SideButtonOutputs.RightId, settings.MouseSetup);
+        backTitle.Text = ClickButtons.Label(back) + " click"; frontTitle.Text = ClickButtons.Label(front) + " click";
+        leftState.Text = output == back ? active : "Off";
+        rightState.Text = output == front ? active : "Off";
         state.Text = enabled ? ClickButtons.OutputLabel(output, settings.CustomKey) + " · " + active : actual == EngineState.Error ? "Input error" : "Stopped";
         detail.Text = error ?? (!ready ? "Shortcuts unavailable. Review the dashboard message and apply again." : !assigned ? "Apply mouse setup to enable the two toggle assignments." : blocked ? "Close the open test or configuration window before activating." : targetReason);
-        setupTitle.Text = assigned && ready ? "Reapply mouse setup" : "Apply mouse setup";
+        setupTitle.Text = assigned && ready ? "Reapply" : "Apply";
         shortcuts.Text = $"Both toggle · Pause {ShortcutKeys.Label(settings.PauseKey)} · Stop {ShortcutKeys.Label(settings.StopKey)}";
-        LeftControl.IsEnabled = assigned && ready && (!blocked || enabled && output == ClickButton.Left);
-        RightControl.IsEnabled = assigned && ready && (!blocked || enabled && output == ClickButton.Right);
-        LeftControl.Content = enabled && output == ClickButton.Left ? "Stop Left" : "Toggle Left";
-        RightControl.Content = enabled && output == ClickButton.Right ? "Stop Right" : "Toggle Right";
+        LeftControl.IsEnabled = assigned && ready && (!blocked || enabled && output == back);
+        RightControl.IsEnabled = assigned && ready && (!blocked || enabled && output == front);
+        LeftControl.Content = (enabled && output == back ? "Stop " : "Toggle ") + ClickButtons.Label(back);
+        RightControl.Content = (enabled && output == front ? "Stop " : "Toggle ") + ClickButtons.Label(front);
         EmergencyControl.Content = "Emergency stop · " + ShortcutKeys.Label(settings.StopKey);
         bool fixedMode = settings.TimingMode == ClickTimingMode.Fixed;
         speed.Text = fixedMode ? $"Speed · {settings.Cps} CPS" : $"Variable speed · {settings.MinimumCps}–{settings.MaximumCps} CPS (change on dashboard)";
         SpeedControl.Visibility = fixedMode ? Visibility.Visible : Visibility.Collapsed;
-        refreshing = true; try { SpeedControl.Value = settings.Cps; } finally { refreshing = false; }
+        refreshing = true; try { SpeedControl.Value = settings.Cps; SetupSelector.SelectedIndex = (int)settings.MouseSetup; } finally { refreshing = false; }
     }
 }

@@ -144,7 +144,7 @@ public partial class MainWindow
         content!.LayoutTransform = Transform.Identity; DashboardScroll.ScrollToTop();
         Width = 1280; Height = 920; await Task.Delay(50); UpdateLayout();
         if (ActualWidth >= 1240)
-            Check(InspectorHost.Visibility == Visibility.Visible && RailColumn.Width.Value == 170, "Wide obsidian shell exposes rail and genuine target/profile inspector");
+            Check(InspectorHost.Visibility == Visibility.Collapsed && NavTarget.IsVisible, "Simple shell keeps target details behind a clearly labeled window action");
         else results.Add("UNAVAILABLE Wide inspector layout: Windows capped the requested 1280-DIP window on this display.");
         Check(desktopTarget.Snapshot is null && InspectorIdentity.Text == "No window selected" && InspectorValidity.Text == "Not selected", "Target inspector never fabricates a selected or verified window");
         Check(((SolidColorBrush)FindResource("Base")).Color == Color.FromRgb(18, 20, 23) && ((SolidColorBrush)FindResource("Accent")).Color == Color.FromRgb(231, 196, 119), "Calmer dark surfaces preserve the existing champagne accent");
@@ -155,7 +155,7 @@ public partial class MainWindow
         Check(profiles.Load().Single(p => p.Id == quick.Id).FixedCps == 13 && !engine.Enabled, "Inspector Save persists the current timing in the active profile");
         profiles.Delete(quick.Id); settings = settings with { ActiveProfileId = null }; CpsInput.Text = "10"; UpdateProfileLabel();
         Width = 800; Height = 700; await Task.Delay(50); UpdateLayout();
-        Check(InspectorHost.Visibility == Visibility.Collapsed && RailColumn.Width.Value == 58, "Narrow shell collapses secondary inspector and navigation labels");
+        Check(InspectorHost.Visibility == Visibility.Collapsed && NavTarget.IsVisible && NavProfiles.IsVisible, "Narrow shell preserves readable navigation without a crowded inspector");
         TargetClicked(this, new()); await Task.Delay(30);
         Check(targetWindow?.IsVisible == true && InspectorHost.Content is null && !engine.Enabled, "Target navigation relocates the same live inspector into a compact view");
         RenderDiagnostic(targetWindow!, Path.Combine(directory, "ui-target-view.png")); targetWindow!.Close();

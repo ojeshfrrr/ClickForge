@@ -15,7 +15,7 @@ public partial class MainWindow
     private TimingProfile[] quickProfiles = [];
     private (bool, bool, long, long, double)? lastSessionDisplay;
     private readonly record struct InspectorDisplay(DesktopTargetService.Inspection? Snapshot, TargetStatus Selected, TargetStatus Active,
-        ClickTimingMode Mode, bool Restricted, int Cps, int Minimum, int Maximum, string Feedback, bool HasSelection);
+        ClickTimingMode Mode, bool Restricted, bool SelectedSetup, int Cps, int Minimum, int Maximum, string Feedback, bool HasSelection);
     private InspectorDisplay? lastInspectorDisplay;
     private void RenderSessionStatistics()
     {
@@ -45,7 +45,7 @@ public partial class MainWindow
         if (InspectorHost.Visibility == Visibility.Visible) { DesktopTargetInput.BringIntoView(); DesktopTargetInput.Focus(); return; }
         if (targetWindow is not null) { targetWindow.Activate(); return; }
         InspectorHost.Content = null;
-        targetWindow = new Window(); DialogLayout.Setup(targetWindow, "Target and profile", 480, 760); targetWindow.Owner = this;
+        targetWindow = new Window(); DialogLayout.Setup(targetWindow, "Choose a window", 480, 760); targetWindow.Owner = this;
         targetWindow.Content = new ScrollViewer { Content = InspectorContent, Margin = new(20), VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         targetWindow.Closed += (_, _) =>
         {
@@ -99,9 +99,9 @@ public partial class MainWindow
         if (InspectorIdentity is null) return;
         var snapshot = desktopTarget.Snapshot;
         var selectedStatus = snapshot?.Status ?? desktopTarget.Status;
-        var activeStatus = settings.TimingMode == ClickTimingMode.Variable ? selectedStatus : target.Status;
+        var activeStatus = settings.TimingMode == ClickTimingMode.Variable || MinecraftSetupActive ? selectedStatus : target.Status;
         RenderSessionStatistics();
-        var display = new InspectorDisplay(snapshot, selectedStatus, activeStatus, settings.TimingMode, settings.RobloxOnly,
+        var display = new InspectorDisplay(snapshot, selectedStatus, activeStatus, settings.TimingMode, settings.RobloxOnly, MinecraftSetupActive,
             settings.Cps, settings.MinimumCps, settings.MaximumCps, VariableValidationText.Text, DesktopTargetInput.SelectedItem is not null);
         if (lastInspectorDisplay != display)
         {
@@ -110,7 +110,7 @@ public partial class MainWindow
             InspectorFeedback.Text = VariableValidationText.Text;
             InspectorFeedback.Visibility = string.IsNullOrEmpty(InspectorFeedback.Text) ? Visibility.Collapsed : Visibility.Visible;
             InspectorIdentity.Text = snapshot is null ? "No window selected" : snapshot.VerifiedRoblox ? "Roblox client" : "Desktop application";
-            InspectorVerification.Text = snapshot is null ? "Select a window for Variable CPS" : snapshot.VerifiedRoblox ? "Roblox identity verified at selection" : "Desktop metadata checked at selection";
+            InspectorVerification.Text = snapshot is null ? MinecraftSetupActive ? "Choose your Minecraft window" : "Choose the window to receive input" : snapshot.VerifiedRoblox ? "Roblox identity verified at selection" : "Desktop metadata checked at selection";
             InspectorVerification.Foreground = (Brush)FindResource(snapshot is { VerifiedRoblox: true } && selectedStatus.ChecksPassed ? "Success" : "Muted");
             InspectorEligibilityText.Text = selectedStatus.Label + ". " + selectedStatus.Explanation;
             InspectorEligibilityText.Foreground = (Brush)FindResource(selectedStatus.ChecksPassed ? "Success" : "Muted");
@@ -125,27 +125,21 @@ public partial class MainWindow
             InspectorPointer.Foreground = (Brush)FindResource(snapshot?.PointerInside == true ? "Success" : "Muted");
             RobloxStatusText.Text = activeStatus.Label;
             RobloxStatusText.Foreground = (Brush)FindResource(activeStatus.ChecksPassed ? "Success" : "Text");
-            TargetText.Text = settings.TimingMode == ClickTimingMode.Variable ? "Selected-window checks · see Target" : settings.RobloxOnly ? "Roblox foreground restriction" : "Any foreground application";
+            TargetText.Text = activeStatus.Explanation;
             TargetText.ToolTip = activeStatus.Explanation;
             ConfiguredIntervalText.Text = settings.TimingMode == ClickTimingMode.Fixed ? $"≈ {Speed.Interval(settings.Cps):0.#} ms" : $"{1000d / settings.MaximumCps:0.#}–{1000d / settings.MinimumCps:0.#} ms";
         }
         StateHintText.Text = engine.State == EngineState.Error ? "Input stopped safely" : engine.IsPaused ? "Paused by you" :
             !engine.Enabled ? "Activate explicitly" : engine.State == EngineState.Running ? "Sending input pairs" : activeStatus.Label;
         StateGlyph.Text = engine.State switch { EngineState.Running => "▶", EngineState.Paused => "Ⅱ", EngineState.Error => "!", _ => "■" };
-        RailState.Text = RailColumn.Width.Value == 58 ? "●" : "●  " + EffectiveState;
+        RailState.Text = EffectiveState;
         RailState.ToolTip = EffectiveState;
     }
     internal static string SelectedFocusText(SelectedTargetFacts? facts) => facts is null ? "No target" : !facts.WindowIdentityValid ? "Unavailable" : facts.Foreground ? "●  In focus" : "○  Not in focus";
     private void LayoutShell()
     {
         if (InspectorHost is null) return;
-        bool compact = ActualWidth < 1120;
-        RailColumn.Width = new(compact ? 58 : 170);
-        RailFooter.Margin = compact ? new Thickness(2, 0, 0, 0) : new Thickness(14, 0, 0, 0);
-        foreach (var button in new[] { NavDashboard, NavProfiles, NavTarget, NavSettings, NavHotkeys, NavUpdates }) button.Padding = compact ? new(9, 15, 9, 15) : new(13, 15, 13, 15);
-        foreach (var element in new FrameworkElement[] { BrandWordmark, BrandDescriptor, NavDashboardLabel, NavProfilesLabel, NavTargetLabel, NavSettingsLabel, NavHotkeysLabel, NavUpdatesLabel }) element.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        bool inspector = ActualWidth >= 1240;
-        InspectorColumn.Width = new(inspector ? 258 : 0); InspectorHost.Visibility = inspector ? Visibility.Visible : Visibility.Collapsed;
-        StateRing.Visibility = DashboardScroll.ActualWidth < 680 ? Visibility.Collapsed : Visibility.Visible;
+        InspectorHost.Visibility = Visibility.Collapsed;
+        StateRing.Visibility = Visibility.Collapsed;
     }
 }

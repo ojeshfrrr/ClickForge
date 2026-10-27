@@ -85,8 +85,10 @@ public partial class MainWindow
         bool variable = settings.TimingMode == ClickTimingMode.Variable;
         FixedSpeedPanel.Visibility = variable ? Visibility.Collapsed : Visibility.Visible;
         VariableSpeedPanel.Visibility = variable ? Visibility.Visible : Visibility.Collapsed;
-        RestrictInput.IsEnabled = !variable;
-        RestrictionHelp.Text = variable ? "Variable CPS always requires the selected window, including a verified Roblox client. Your fixed-mode preference is preserved." : "Clicking pauses automatically when Roblox loses foreground focus.";
+        RestrictInput.IsEnabled = !variable && !MinecraftSetupActive;
+        RestrictInput.Content = MinecraftSetupActive ? "Regular clicker: Roblox only (saved)" : "Only click while Roblox is in front";
+        RestrictionHelp.Text = variable || MinecraftSetupActive ? "This setup only sends to your chosen window while it is in front and under the pointer. Your regular-clicker preference is kept." : "Clicking waits when Roblox is not in front.";
+        SynchronizeSetupControls();
         lastDisplay = null;
     }
     private void SynchronizeRange()
@@ -168,6 +170,7 @@ public partial class MainWindow
         if (ShortcutKeys.ConflictsWithHoldOutput(settings)) { engine.Stop(); MessageText.Text = "Hold mode requires a different click-output button from the mouse activation shortcut. Choose Left output, another side button, or Toggle mode."; return; }
         if (profilesWindow?.IsVisible == true || preferencesWindow?.IsVisible == true || targetWindow?.IsVisible == true) { engine.Stop(); MessageText.Text = "Close Profiles, Settings and Target before activating clicking."; return; }
         if (settings.TimingMode == ClickTimingMode.Variable && !TryRange(out _)) { engine.Stop(); MessageText.Text = VariableValidationText.Text; return; }
+        if (MinecraftSetupActive && !SelectedSetupCanActivate) { engine.Stop(); MessageText.Text = "Choose your Minecraft window first, then activate from ClickForge or that window."; return; }
         try { engine.Start(); history.Add(ActivityKind.Started); }
         catch (InvalidOperationException ex) { MessageText.Text = ex.Message; VariableValidationText.Text = ex.Message; history.Add(ActivityKind.Waiting); }
     }

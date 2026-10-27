@@ -47,8 +47,9 @@ public partial class MainWindow : Window
         // Each automated UI run starts from defaults; persistence assertions still
         // use the disposable store. Interactive tests and normal launches load it.
         settings = GetArgument("--ui-self-test") is not null ? new() : store.Load();
-        if (settings.LayoutVersion < 3) settings = settings with { Width = 1280, Height = 920, LayoutVersion = 3 };
-        engine = selfTestPath is null ? new(new MouseInputService(), target, desktopTarget) : new(diagnosticMouse, diagnosticTarget);
+        if (settings.LayoutVersion < 4) settings = settings with { Width = 1000, Height = 880, LayoutVersion = 4 };
+        engine = selfTestPath is null ? new(new MouseInputService(), new SetupTargetGate(target, desktopTarget, () => MinecraftSetupActive), desktopTarget)
+            : new(diagnosticMouse, new SetupTargetGate(diagnosticTarget, diagnosticDesktopTarget, () => MinecraftSetupActive));
         InitializeComponent();
         InputTypeInput.Items.Add("Mouse"); InputTypeInput.Items.Add("Keyboard");
         foreach (var button in ClickButtons.MouseChoices) ClickButtonInput.Items.Add(ClickButtons.Label(button));
@@ -106,6 +107,7 @@ public partial class MainWindow : Window
         PauseInput.SelectedItem = ShortcutKeys.Label(settings.PauseKey);
         StopInput.SelectedItem = ShortcutKeys.Label(settings.StopKey);
         SideButtonTogglesInput.IsChecked = settings.SideButtonToggles;
+        SynchronizeSetupControls();
         engine.Cps = settings.Cps; target.Restricted = settings.RobloxOnly;
         engine.ConfigureLimits(new(settings.MaximumSessionSeconds, settings.MaximumSessionPairs));
         if (advancedControls is not null) LoadLimitControls();
@@ -119,7 +121,7 @@ public partial class MainWindow : Window
     private void RegisterShortcuts()
     {
         engine.Stop(); shortcutsReady = false;
-        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = settings.SideButtonToggles ? "Mouse 4 (Back) toggles Left; Mouse 5 (Forward) toggles Right. Both use Toggle mode. F8 emergency stop remains available when configured." : "Shortcuts ready. F1–F11 and Mouse 4/5 are supported."; }
+        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = settings.SideButtonToggles ? SideButtonOutputs.Summary(settings.MouseSetup) + ". Press again to stop." : "Ready when you are. Press Start or your activation shortcut."; }
         catch (Exception e) { MessageText.Text = e.Message + " Clicking is disabled until shortcuts are available."; }
         StartKeyText.Text = ShortcutBadge(settings.ActivateKey); StartKeyText.ToolTip = ShortcutKeys.Label(settings.ActivateKey);
         PauseKeyText.Text = ShortcutBadge(settings.PauseKey); PauseKeyText.ToolTip = ShortcutKeys.Label(settings.PauseKey);
@@ -180,6 +182,7 @@ public partial class MainWindow : Window
     {
         if (!ready) return;
         engine.Stop(); settings = settings with { Mode = HoldModeInput.IsChecked == true ? ActivationMode.Hold : ActivationMode.Toggle };
+        SynchronizeSetupControls();
         Persist(); UpdateStatus();
     }
     private void RestrictionChanged(object sender, RoutedEventArgs e)
@@ -233,7 +236,7 @@ public partial class MainWindow : Window
         PauseLabel.Text = engine.IsPaused ? "Resume" : "Pause"; PauseButton.IsEnabled = active;
         PauseButton.ToolTip = active ? "Pause or resume the active request" : "Start clicking before using pause";
         StartButton.ToolTip = !shortcutsReady ? "Apply available, nonconflicting shortcuts to enable clicking" : settings.Mode == ActivationMode.Hold && !active ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to activate. Release it or change focus to stop." : "Start or stop the request. Roblox-only mode waits for a verified foreground client.";
-        ModeHelp.Text = ShortcutKeys.ConflictsWithHoldOutput(settings) ? "Hold activation requires a different click-output button." : settings.Mode == ActivationMode.Hold ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to click. Release or change focus to stop." : settings.SideButtonToggles ? "Mouse 4 → Left · Mouse 5 → Right. Press again to stop; the other switches." : $"Press {ShortcutKeys.Label(settings.ActivateKey)} once to start, again to stop.";
+        ModeHelp.Text = ShortcutKeys.ConflictsWithHoldOutput(settings) ? "Choose a different output from your Hold shortcut." : settings.Mode == ActivationMode.Hold ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to click. Release to stop." : settings.SideButtonToggles ? SideButtonOutputs.Summary(settings.MouseSetup) + ". Press again to stop." : $"Press {ShortcutKeys.Label(settings.ActivateKey)} once to start, again to stop.";
         RenderVariableStatus(); UpdateDailyStatus();
         if (engine.Error is { } error) MessageText.Text = error;
     }
@@ -252,7 +255,7 @@ public partial class MainWindow : Window
         if (!exitRequested && previewPath is null && settings.CloseToTray && CanHideToTray) { e.Cancel = true; HideToTray(); return; }
         sideButtonWindow?.Close();
         closing = true; compactWindow?.Close(); paletteWindow?.Close(); customKeyWindow?.Close(); targetWindow?.Close(); tray?.Dispose(); tray = null; profilesWindow?.Close(); preferencesWindow?.Close(); updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
-        if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 3 }; Persist(); }
+        if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 4 }; Persist(); }
     }
     private void LayoutChanged(object sender, SizeChangedEventArgs e)
     {
@@ -263,14 +266,5 @@ public partial class MainWindow : Window
         Grid.SetColumn(RestrictionPanel, narrow ? 0 : 1); Grid.SetRow(RestrictionPanel, narrow ? 1 : 0);
         ModePanel.Margin = narrow ? new Thickness(0, 0, 0, 10) : new Thickness(0, 0, 6, 0);
         RestrictionPanel.Margin = narrow ? new Thickness(0) : new Thickness(6, 0, 0, 0);
-        if (StatusGrid.RowDefinitions.Count == 0) { StatusGrid.RowDefinitions.Add(new() { Height = GridLength.Auto }); StatusGrid.RowDefinitions.Add(new() { Height = GridLength.Auto }); }
-        for (int i = 0; i < StatusGrid.Children.Count; i++)
-        {
-            var child = (FrameworkElement)StatusGrid.Children[i];
-            Grid.SetRow(child, narrow && i >= 2 ? 1 : 0);
-            Grid.SetColumn(child, narrow ? i % 2 * 2 : i);
-            Grid.SetColumnSpan(child, narrow ? 2 : 1);
-            if (i >= 2) child.Margin = narrow ? new Thickness(0, 14, 0, 0) : new Thickness(0);
-        }
     }
 }

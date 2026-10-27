@@ -14,6 +14,8 @@ public partial class MainWindow
 {
     private readonly DiagnosticMouse diagnosticMouse = new();
     private readonly DiagnosticTarget diagnosticTarget = new();
+    private readonly DiagnosticSelectedTarget diagnosticDesktopTarget = new();
+    private sealed class DiagnosticSelectedTarget : IVariableTargetGate { public bool CanActivate { get; set; } public bool CanClick { get; set; } }
     private sealed class DiagnosticMouse : IMouseInput
     {
         public volatile bool Fail;
@@ -112,7 +114,7 @@ public partial class MainWindow
             Hotkey(1); await Task.Delay(50); Hotkey(2);
             Check(engine.Enabled && engine.IsPaused, "Mouse shortcut command IDs reuse activation and pause behavior with mock input");
             Hotkey(3); HoldModeInput.IsChecked = true; ClickButtonInput.SelectedIndex = 1; Hotkey(1);
-            Check(!engine.Enabled && MessageText.Text.Contains("different click-output") && ModeHelp.Text.Contains("different click-output"), "Hold with matching mouse output is blocked with a clear explanation");
+            Check(!engine.Enabled && MessageText.Text.Contains("different click-output") && ModeHelp.Text.Contains("different output"), "Hold with matching mouse output is blocked with a clear explanation");
             ClickButtonInput.SelectedIndex = 0;
             Check(ModeHelp.Text.Contains("Mouse 4 (Back)"), "Hold instructions display the selected mouse shortcut correctly");
             ToggleModeInput.IsChecked = true; ResetClicked(this, new());
@@ -188,12 +190,13 @@ public partial class MainWindow
             RenderDiagnostic((FrameworkElement)popup.Child!, Path.Combine(Path.GetDirectoryName(output)!, "ui-mouse-hotkeys-dropdown.png"));
             ActivateInput.IsDropDownOpen = false; ActivateInput.SelectedIndex = keyboardSelection;
             ActivateInput.IsDropDownOpen = false; ShortcutsExpander.IsExpanded = false;
-            Width = 640; Height = 700; await Task.Delay(100); UpdateLayout();
+            Width = 640; Height = 700; ShortcutsExpander.IsExpanded = true; await Task.Delay(100); UpdateLayout();
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-small.png"));
             Check(Grid.GetRow(RestrictionPanel) == 1 && scroll.ScrollableHeight > 0, "Narrow layout stacks options and scrolls intentionally");
             scroll.ScrollToEnd(); await Task.Delay(70);
             Check(scroll.VerticalOffset > 0, "Styled scrollbar reaches lower controls");
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-small-bottom.png"));
+            ShortcutsExpander.IsExpanded = false;
             using (var test = new DiagnosticTestWindowScope(this))
             {
                 Check(test.Window.IsVisible, "Controlled test window opens and closes");
