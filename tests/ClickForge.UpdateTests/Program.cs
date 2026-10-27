@@ -35,6 +35,19 @@ await Test("Updater requests identify the actual assembly release version", asyn
     Check(productVersion == SemanticVersion.Installed(typeof(UpdateClient).Assembly).Value.Split('+')[0] && client.Status.State == UpdateState.Unavailable);
 });
 
+await Test("Upgrade and rollback preserve Bedwars setup without enabling input", async () =>
+{
+    foreach (bool startupFails in new[] { false, true })
+    {
+        using var fixture = new Fixture(); string path = Path.Combine(fixture.Install, "settings.json");
+        var store = new SettingsService(path); var preferences = new Settings { MouseSetup = MouseSetup.MinecraftBedwars, SideButtonToggles = true, Cps = 19, RobloxOnly = true };
+        store.Save(preferences); string before = File.ReadAllText(path);
+        var request = fixture.Prepare(); bool completed = await new UpdateInstaller(new Platform { Confirm = !startupFails }, fixture.Updates, fixture.Package).InstallAsync(request);
+        Check(completed != startupFails && File.ReadAllText(path) == before && store.Load() == preferences);
+        using var engine = new ClickEngine(new NoMouse(), new NoTarget()); Check(!engine.Enabled && engine.State == EngineState.Stopped);
+    }
+});
+
 await Test("Semantic version precedence and build metadata", () => Done(() => { Check(SemanticVersion.Parse("v1.10.0").CompareTo(SemanticVersion.Parse("1.9.9")) > 0); Check(installed.CompareTo(SemanticVersion.Parse("1.1.0+other")) == 0); Check(SemanticVersion.Parse("1.2.0-beta.10").CompareTo(SemanticVersion.Parse("1.2.0-beta.2")) > 0); Check(SemanticVersion.Parse("1.2.0").CompareTo(SemanticVersion.Parse("1.2.0-rc.1")) > 0); }));
 await Test("Malformed versions rejected", () => Done(() => { foreach (string? value in new[] { "1.2", "01.2.3", "1.2.3-01", "1.2.3-", "../1.2.3", "1.2.3\n", null }) Throws(() => SemanticVersion.Parse(value)); }));
 await Test("Installer assets coexist without changing the verified ZIP update channel", () => Done(() =>
