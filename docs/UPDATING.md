@@ -1,5 +1,25 @@
 # Updating ClickForge
 
+## v1.6 update flow
+
+Open **Updates**, choose **Check for updates**, then **Download update**. After the
+package is verified, **Install and restart** becomes available and still asks for
+confirmation. Opening Updates stops input and blocks activation while it is open;
+closing it does not resume a request. Automatic startup checks only check for a
+release and never install or start input.
+
+The updater and helper share `Version.props`. Requests now identify the actual
+assembly release version rather than a fixed historic updater version. The
+official public feed, allowed download hosts, strict payload/manifest checks,
+checksums, independent helper, startup acknowledgement and rollback are unchanged.
+The installer and ZIP are still built and verified by the tagged release workflow.
+Existing updater-enabled versions use the same public channel without an account.
+
+Settings, profiles and the Bedwars `MouseSetup` preference are retained by both
+upgrade and rollback. The running request is never persisted. An install button
+cannot be enabled merely by a status label without an actual verified staged
+package. See [v1.6 release verification](RELEASE-v1.6.0.md).
+
 ## Versions and the first updater-enabled build
 
 `Version.props` is the single source of the application/helper version. The first updater-enabled version is **1.1.1**. Use `MAJOR.MINOR.PATCH`: patches for fixes, minor versions for compatible features, and major versions for breaking changes. Release tags must exactly match it, prefixed with `v`.
