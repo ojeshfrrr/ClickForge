@@ -1,17 +1,19 @@
 namespace ClickForge.Core;
 
-public enum ClickButton { Left, Mouse4, Mouse5, CustomKey }
+// Persisted values: keep existing mouse/keyboard choices compatible.
+public enum ClickButton { Left = 0, Mouse4 = 1, Mouse5 = 2, CustomKey = 3, Right = 4 }
 public readonly record struct MousePacket(uint Flags, uint Data);
 public static class ClickButtons
 {
-    public static IReadOnlyList<ClickButton> MouseChoices { get; } = Array.AsReadOnly(new[] { ClickButton.Left, ClickButton.Mouse4, ClickButton.Mouse5 });
+    public static IReadOnlyList<ClickButton> MouseChoices { get; } = Array.AsReadOnly(new[] { ClickButton.Left, ClickButton.Mouse4, ClickButton.Mouse5, ClickButton.Right });
     public static void Validate(ClickButton button) { if (!Enum.IsDefined(button)) throw new ArgumentException("Choose a mouse button or Custom input key."); }
-    public static string Label(ClickButton button) => button switch { ClickButton.Left => "Left", ClickButton.Mouse4 => "Mouse 4 (Back)", ClickButton.Mouse5 => "Mouse 5 (Forward)", ClickButton.CustomKey => "Custom input key…", _ => throw new ArgumentException("Invalid click button.") };
+    public static string Label(ClickButton button) => button switch { ClickButton.Left => "Left", ClickButton.Right => "Right", ClickButton.Mouse4 => "Mouse 4 (Back)", ClickButton.Mouse5 => "Mouse 5 (Forward)", ClickButton.CustomKey => "Custom input key…", _ => throw new ArgumentException("Invalid click button.") };
     public static string OutputLabel(ClickButton button,int key) => button == ClickButton.CustomKey ? "Key: "+KeyboardOutput.Label(key) : Label(button);
     // Win32 MOUSEINPUT: XDOWN/XUP use mouseData XBUTTON1=1 / XBUTTON2=2.
     public static MousePacket Packet(ClickButton button, bool up) => button switch
     {
         ClickButton.Left => new(up ? 0x0004u : 0x0002u, 0),
+        ClickButton.Right => new(up ? 0x0010u : 0x0008u, 0),
         ClickButton.Mouse4 => new(up ? 0x0100u : 0x0080u, 1),
         ClickButton.Mouse5 => new(up ? 0x0100u : 0x0080u, 2),
         _ => throw new ArgumentException("Invalid click button.")
