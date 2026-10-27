@@ -27,7 +27,7 @@ public partial class MainWindow
     private long timelineVersion = -1;
     private bool loadingLimits;
     private bool ConfigurationBlocked => activeTest?.IsVisible == true || profilesWindow?.IsVisible == true || preferencesWindow?.IsVisible == true ||
-        targetWindow?.IsVisible == true || customKeyWindow?.IsVisible == true || paletteWindow?.IsVisible == true;
+        targetWindow?.IsVisible == true || customKeyWindow?.IsVisible == true || paletteWindow?.IsVisible == true || updateWindow?.IsVisible == true;
 
     private void InitializeAdvanced()
     {

@@ -164,6 +164,7 @@ public partial class MainWindow
     }
     private void StartValidated()
     {
+        if (updateWindow?.IsVisible == true) { engine.Stop(); MessageText.Text = "Close Updates before starting clicks."; return; }
         if (paletteWindow?.IsVisible == true) { MessageText.Text = "Close the command palette before activating input."; return; }
         if(customKeyWindow?.IsVisible==true){engine.Stop();MessageText.Text="Finish choosing the custom input key before activation.";return;}
         try{settings.Validate();}catch(ArgumentException ex){engine.Stop();MessageText.Text=ex.Message;return;}

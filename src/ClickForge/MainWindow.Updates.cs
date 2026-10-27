@@ -40,10 +40,11 @@ public partial class MainWindow
     }
     private void UpdatesClicked(object sender, RoutedEventArgs e)
     {
+        engine.Stop(); activeTest?.StopTest();
         if (updateWindow is not null) { updateWindow.Activate(); return; }
         updateWindow = new UpdateWindow(updateClient, settings.CheckForUpdatesOnStartup,
             enabled => { settings = settings with { CheckForUpdatesOnStartup = enabled }; Persist(); }, InstallUpdateAsync) { Owner = this };
-        updateWindow.Closed += (_, _) => updateWindow = null; updateWindow.Show();
+        updateWindow.Closed += (_, _) => { updateWindow = null; engine.Stop(); lastDisplay = null; UpdateStatus(); }; updateWindow.Show(); UpdateStatus();
     }
     private async Task InstallUpdateAsync()
     {
