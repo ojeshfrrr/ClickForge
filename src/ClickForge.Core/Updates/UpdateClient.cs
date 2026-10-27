@@ -26,7 +26,7 @@ public sealed class UpdateClient : IDisposable
     {
         http = client ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
         http.Timeout = Timeout.InfiniteTimeSpan;
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("ClickForge-Updater/1.1");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("ClickForge-Updater/" + SemanticVersion.Installed(typeof(UpdateClient).Assembly).Value.Split('+')[0]);
         root = updatesRoot ?? UpdateChannel.UpdatesRoot; package = verifier ?? new();
     }
     public void Report(UpdateState state, string message) => Set(new(state, message));
