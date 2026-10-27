@@ -45,8 +45,14 @@ The application and helper are unsigned. Do not disable Windows security tools.
 
 F6: Toggle/hold activation. F7: Pause/resume. F8: Emergency stop.
 Global shortcuts also support Mouse 4 (Back) and Mouse 5 (Forward).
-Choose Left, Mouse 4, Mouse 5, or Custom input key beside Click speed.
-Custom output repeats a single keyboard key; shortcut conflicts are rejected.
+Beside Click speed, select Input type: Mouse or Keyboard.
+Mouse output: Left, Mouse 4 (Back), Mouse 5 (Forward), or Right.
+Keyboard output captures one supported key; shortcut conflicts are rejected.
+For simple controls, open Hotkeys > Mouse controls > Apply mouse setup.
+Mouse 4 (Back) toggles Left; Mouse 5 (Forward) toggles Right. The same button
+stops input; the other switches the single worker. Both use Toggle mode.
+Setup selects F6/F7/F8 while keeping speed and target restrictions. Side-button
+assignments default off. Opening/closing the simple window stops input.
 Changing output stops input. Session statistics count submitted input pairs,
 not target acceptance; elapsed time includes pauses and target waits.
 Clicking starts disabled. Roblox foreground restriction is on by default.
