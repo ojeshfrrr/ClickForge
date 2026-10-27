@@ -22,7 +22,7 @@ internal static class NativeButtonDiagnostics
                 if (Native.GetForegroundWindow() != own) { exit = 2; results.Add("UNAVAILABLE Windows did not grant foreground to the isolated safe pad. No input sent."); return; }
                 foreach (var button in ClickButtons.MouseChoices)
                 {
-                    window.ButtonSelector.SelectedIndex = (int)button;
+                    window.SelectOutput(button);
                     window.UpdateLayout(); lastPosition = window.PadCenter;
                     if (!Native.SetCursorPos((int)lastPosition.X, (int)lastPosition.Y)) throw new InvalidOperationException("Cannot position pointer in the safe pad.");
                     moved = true; await Task.Delay(100);

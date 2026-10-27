@@ -44,6 +44,7 @@ public sealed class TestWindow : Window, ITargetGate
     private DateTime end;
     private int received, released;
     private readonly Queue<string> buttonEvents = new();
+    private readonly List<ClickButton> testOutputs = [];
     private bool initialized, started;
     internal SimulationSnapshot VariableSnapshot => simulation.Snapshot;
     internal bool FixedTestEnabled => fixedEngine?.Enabled == true;
@@ -56,7 +57,15 @@ public sealed class TestWindow : Window, ITargetGate
     internal Border TestPad => pad;
     internal int ReceivedUps => released;
     internal Point PadCenter => pad.PointToScreen(new Point(pad.ActualWidth / 2, pad.ActualHeight / 2));
-    private ClickButton SelectedButton => (ClickButton)ButtonSelector.SelectedIndex;
+    private ClickButton SelectedButton => ButtonSelector.SelectedIndex >= 0 && ButtonSelector.SelectedIndex < testOutputs.Count
+        ? testOutputs[ButtonSelector.SelectedIndex] : throw new InvalidOperationException("Choose a supported test output.");
+    internal ClickButton TestOutput => SelectedButton;
+    internal void SelectOutput(ClickButton button)
+    {
+        int index = testOutputs.IndexOf(button);
+        if (index < 0) throw new ArgumentException("That output is unavailable in this test.");
+        ButtonSelector.SelectedIndex = index;
+    }
     public TestWindow(SafeTestMode mode = SafeTestMode.FixedCps, ClickButton button = ClickButton.Left, int customKey = 0)
     {
         KeyboardOutput.ValidateOutput(button,customKey);this.customKey=customKey;
@@ -75,9 +84,9 @@ public sealed class TestWindow : Window, ITargetGate
         AutomationProperties.SetName(ModeSelector, "Safe test timing mode");
         panel.Children.Add(ModeSelector); panel.Children.Add(explanation);
         panel.Children.Add(buttonCaption);
-        foreach (var choice in ClickButtons.MouseChoices) ButtonSelector.Items.Add(ClickButtons.Label(choice));
-        if(KeyboardOutput.IsValid(customKey))ButtonSelector.Items.Add(ClickButtons.OutputLabel(ClickButton.CustomKey,customKey));
-        AutomationProperties.SetName(ButtonSelector, "Safe test click button"); ButtonSelector.SelectedIndex = (int)button;
+        foreach (var choice in ClickButtons.MouseChoices) { testOutputs.Add(choice); ButtonSelector.Items.Add(ClickButtons.Label(choice)); }
+        if (KeyboardOutput.IsValid(customKey)) { testOutputs.Add(ClickButton.CustomKey); ButtonSelector.Items.Add(ClickButtons.OutputLabel(ClickButton.CustomKey, customKey)); }
+        AutomationProperties.SetName(ButtonSelector, "Safe test output, separate from global shortcuts"); SelectOutput(button);
         panel.Children.Add(ButtonSelector);
         var fields = new Grid();
         for (int i = 0; i < 3; i++) fields.ColumnDefinitions.Add(new());
@@ -161,6 +170,7 @@ public sealed class TestWindow : Window, ITargetGate
         explanation.Text = Variable ? "Logical simulation only; no live input. Each run lasts up to 5 seconds. A seed repeats scheduled intervals; Windows scheduling affects measurements. Timing does not establish target input acceptance." : "Controlled test: 2 seconds at 10 CPS using the selected button. Move the pointer inside the pad. Down and up events received here are shown below; no Roblox input is used.";
         if(!Variable&&SelectedButton==ClickButton.CustomKey)explanation.Text="Controlled keyboard test: 2 seconds at 10 CPS. Keep the pointer and keyboard focus inside the pad. It records key down/up events; no Roblox input is used.";
         ((TextBlock)pad.Child).Text=SelectedButton==ClickButton.CustomKey?"Keyboard test pad · "+KeyboardOutput.Label(customKey):"Fixed-CPS mouse input target";
+        buttonCaption.Text = SelectedButton == ClickButton.CustomKey ? "Keyboard output (controlled input test)" : "Mouse output (controlled input test)";
         status.Text = Variable ? "Ready · logical events only" : "Ready · 10 CPS · "+ClickButtons.OutputLabel(SelectedButton,customKey);
         ValidateInputs(); if (!Variable) { validation.Text = ""; start.IsEnabled = true; }
     }
@@ -226,7 +236,7 @@ public sealed class TestWindow : Window, ITargetGate
     }
     private void RecordButton(MouseButton button, bool down)
     {
-        ClickButton? mapped = button switch { MouseButton.Left => ClickButton.Left, MouseButton.XButton1 => ClickButton.Mouse4, MouseButton.XButton2 => ClickButton.Mouse5, _ => null };
+        ClickButton? mapped = button switch { MouseButton.Left => ClickButton.Left, MouseButton.Right => ClickButton.Right, MouseButton.XButton1 => ClickButton.Mouse4, MouseButton.XButton2 => ClickButton.Mouse5, _ => null };
         if (mapped != SelectedButton) return;
         if (down) received++; else released++;
         if (buttonEvents.Count == 12) buttonEvents.Dequeue();
