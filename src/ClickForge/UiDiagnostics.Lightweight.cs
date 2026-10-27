@@ -20,6 +20,11 @@ public partial class MainWindow
 
         // Observe actual dependency-property changes, including transient writes
         // replaced later in the same refresh (a source of unnecessary WPF work).
+        // Restricted foreground verification is asynchronous and can legitimately
+        // change status during this loop. Use a stable policy for this idle-only
+        // assertion; target-status invalidation is exercised separately below.
+        bool originalRestriction = settings.RobloxOnly;
+        RestrictInput.IsChecked = false; UpdateStatus();
         int mutations = 0;
         EventHandler changed = (_, _) => mutations++;
         var descriptor = DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
@@ -30,7 +35,11 @@ public partial class MainWindow
             for (int n = 0; n < 20; n++) UpdateStatus();
             Check(mutations == 0, "Unchanged idle refreshes do not rewrite target or session text");
         }
-        finally { foreach (var text in observed) descriptor.RemoveValueChanged(text, changed); }
+        finally
+        {
+            foreach (var text in observed) descriptor.RemoveValueChanged(text, changed);
+            RestrictInput.IsChecked = originalRestriction; UpdateStatus();
+        }
 
         RestrictInput.IsChecked = false; UpdateStatus();
         Check(RobloxStatusText.Text == new TargetStatus(TargetBlockReason.RestrictionOff).Label,
