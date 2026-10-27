@@ -20,6 +20,22 @@ internal static class BedwarsSetupTests
             foreach (Action invalid in new Action[] { () => new Settings { MouseSetup = (MouseSetup)99 }.Validate(), () => SideButtonOutputs.OutputFor(4, (MouseSetup)99), () => SideButtonOutputs.OutputFor(0, MouseSetup.MinecraftBedwars) })
             { bool rejected = false; try { invalid(); } catch (ArgumentException) { rejected = true; } Check(rejected); }
         });
+        test("Bedwars settings persist without weakening restrictions and old settings retain original mappings", () =>
+        {
+            string root = Path.Combine("artifacts", "bedwars-" + Guid.NewGuid()); Directory.CreateDirectory(root);
+            try
+            {
+                string path = Path.Combine(root, "settings.json"); var store = new SettingsService(path);
+                store.Save(new() { SideButtonToggles = true, MouseSetup = MouseSetup.MinecraftBedwars, RobloxOnly = true });
+                var saved = store.Load(); Check(saved.MouseSetup == MouseSetup.MinecraftBedwars && saved.RobloxOnly && saved.SideButtonToggles);
+                using var engine = new ClickEngine(new Mouse(), new Gate());
+                var applied = TimingProfile.Capture(saved, "Saved speed").Apply(saved, engine);
+                Check(applied.MouseSetup == MouseSetup.MinecraftBedwars && applied.RobloxOnly && !engine.Enabled);
+                File.WriteAllText(path, "{\"SideButtonToggles\":true}"); Check(store.Load().MouseSetup == MouseSetup.Standard);
+                File.WriteAllText(path, "{\"MouseSetup\":99}"); Check(store.Load().MouseSetup == MouseSetup.Standard && !store.Load().SideButtonToggles && store.Warning is not null);
+            }
+            finally { Directory.Delete(root, true); }
+        });
     }
     private sealed class Gate : IVariableTargetGate { public bool CanActivate => CanClick; private volatile bool allowed; public bool CanClick { get => allowed; set => allowed = value; } }
     private sealed class Mouse : IMouseInput
