@@ -15,6 +15,7 @@ public sealed record Settings
     public int ActivateKey { get; init; } = 0x75;
     public int PauseKey { get; init; } = 0x76;
     public int StopKey { get; init; } = 0x77;
+    public bool SideButtonToggles { get; init; }
     public bool RobloxOnly { get; init; } = true;
     public double Width { get; init; } = 1280;
     public double Height { get; init; } = 920;
@@ -36,6 +37,7 @@ public sealed record Settings
         int[] keys = [ActivateKey, PauseKey, StopKey];
         if (keys.Any(k => !ShortcutKeys.IsValid(k))) throw new ArgumentException("Choose F1–F11, Mouse 4 (Back), or Mouse 5 (Forward).");
         if (keys.Distinct().Count() != 3) throw new ArgumentException("Each shortcut must use a different key.");
+        if (SideButtonToggles && keys.Any(ShortcutKeys.IsMouse)) throw new ArgumentException("Mouse 4 and Mouse 5 are reserved for Left and Right output toggles. Choose keyboard Activate, Pause and Emergency stop shortcuts first.");
         if (Button == ClickButton.CustomKey && keys.Contains(CustomKey)) throw new ArgumentException("The custom output key cannot match Activate, Pause, or Emergency stop. Choose another output key or shortcut.");
         if (!double.IsFinite(Width) || !double.IsFinite(Height) || Width < 420 || Width > 1400 || Height < 600 || Height > 1600)
             throw new ArgumentException("Invalid window size.");
@@ -87,6 +89,12 @@ public sealed class HotkeyBindings(IHotkeyRegistrar registrar) : IDisposable
                 if (!registrar.Register(i + 1, keys[i])) throw new InvalidOperationException($"{ShortcutKeys.Label(keys[i])} is unavailable. Check shortcut registration, choose another shortcut, and apply again.");
                 ids.Add(i + 1);
             }
+            if (settings.SideButtonToggles)
+                foreach (var (id, key) in SideButtonOutputs.Bindings)
+                {
+                    if (!registrar.Register(id, key)) throw new InvalidOperationException($"{ShortcutKeys.Label(key)} output toggle is unavailable. Apply shortcuts again. Clicking remains stopped.");
+                    ids.Add(id);
+                }
         }
         catch { Dispose(); throw; }
     }
