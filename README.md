@@ -1,22 +1,44 @@
 # ClickForge
 
-A native Windows mouse-click and key-repeat utility built with C# and WPF. **v1.5.0** adds Right-click output, separate Mouse/Keyboard selectors, side-button Left/Right toggles and a simple mouse-control window. Existing timing modes, session limits, profiles, target restrictions, shortcuts, in-app updates and shutdown safeguards remain in place. See the [release notes](docs/RELEASE-v1.5.0.md).
+A native Windows mouse-click and key-repeat utility built with C# and WPF.
+**v1.6.0** introduces a simpler Home view, separate mouse setups and a clearer
+updater. Choose Regular clicker, the original Mouse buttons layout, or
+**Minecraft Bedwars**: **Front / Mouse 5 → Left**, **Back / Mouse 4 → Right**, both
+Toggle, using an explicitly selected target window. Existing timing modes,
+profiles, target checks, session limits, shortcuts and shutdown safeguards remain.
+See the [release notes](docs/RELEASE-v1.6.0.md) and [setup guide](docs/BEDWARS-SETUP.md).
 
-The application uses an obsidian-and-champagne interface with responsive navigation and a genuine target/profile inspector. See the [redesign, complete change list and verification report](docs/OBSIDIAN-REDESIGN.md).
+The dark-and-gold Home view keeps setup and speed visible, puts details behind
+**Session stats** and **More settings**, and pins Start, Pause and Emergency Stop
+outside scrolling content. **Choose window** opens the actual target inspector.
+See the [earlier design history](docs/OBSIDIAN-REDESIGN.md).
 
-![ClickForge application](docs/screenshot.png)
+![ClickForge Home in Minecraft Bedwars setup](docs/bedwars-layout.png)
 
 The dashboard also shows current-session wall-clock elapsed time (including pauses and target waits), input pairs sent, and measured average CPS. Stop freezes these values; a new explicit activation resets them. Target explanations report the actual blocking check. These statistics remain in memory and do not imply the target accepted input. See [session statistics and target status](docs/SESSION-STATISTICS.md).
 
 Dashboard refreshes now run once per second while idle and twice per second while active. Hidden/minimized windows skip dashboard rendering; tray state and global shortcuts remain available. Commands and restoring the window refresh immediately. The click worker and target restrictions are unchanged. This reduces UI work, not the bundled WPF runtime size; no major RAM reduction or zero-CPU guarantee is claimed. See [measurements and verification limits](docs/LIGHTWEIGHT.md).
 
-Expand **Global shortcuts & advanced controls → Advanced session controls** for session auto-stop limits, application-profile suggestions and the private safety timeline. Use the navigation-footer buttons for compact controls and the command palette, or press **Ctrl+K**. Safe Click Test includes a logical timing scope. See [usage, privacy and verification](docs/ADVANCED-CONTROLS.md).
+Expand **More settings → Advanced session controls** for auto-stop limits,
+application-profile suggestions, the private safety timeline, compact controls
+and commands. **Ctrl+K** also opens commands. Safe Click Test includes a logical
+timing scope. See [usage, privacy and verification](docs/ADVANCED-CONTROLS.md).
 
-In the current source UI, choose **Input type → Mouse**, then **Left**, **Mouse 4 (Back)**, **Mouse 5 (Forward)** or **Right** beside Click speed. Mouse → Left remains the default. Changing the output stops input and requires explicit activation; settings and profiles remember it. Open **Safe click test → Fixed CPS** to inspect down/up events in the controlled pad. Unsupported or blocked input stops with an error and never falls back to Left. See [output selection](docs/OUTPUT-TYPES.md) and [Right-click verification](docs/RIGHT-CLICK.md).
+In **Regular clicker**, choose **Output → Mouse**, then **Left**, **Mouse 4 (Back)**,
+**Mouse 5 (Forward)** or **Right**. Mouse → Left remains the default. Changing
+output stops input; settings and profiles remember it. **Try safe test** inspects
+down/up events in the controlled pad. Unsupported input stops with an error and
+never falls back to Left. See [output selection](docs/OUTPUT-TYPES.md) and
+[Right-click verification](docs/RIGHT-CLICK.md).
 
 Choose **Input type → Keyboard** to capture one supported key, or reuse the last conflict-free captured key. **Key: … · Change** opens the recorder. This output is separate from global shortcuts; conflicting keys and modifier combinations are rejected. Cancelling preserves the previous output. See [custom-key transport behavior](docs/CUSTOM-INPUT-KEY.md) and [the output UI guide](docs/OUTPUT-TYPES.md).
 
-For a simpler view, open **Hotkeys → Mouse controls → Apply mouse setup**. **Mouse 4 (Back)** toggles Left-clicking; **Mouse 5 (Forward)** toggles Right-clicking. Press the same side button again to stop; the other switches the single worker. Setup selects Toggle mode and F6/F7/F8 keyboard shortcuts while keeping timing and target restrictions. The window shows actual Sending, Paused or Waiting status, speed, Safe Test and a pinned Emergency Stop. Opening, closing or configuring it stops input. Side assignments default off. See [setup and verification](docs/SIDE-BUTTON-CONTROLS.md).
+Choose **Mouse buttons** for Back → Left / Front → Right, or **Minecraft Bedwars**
+for Back → Right / Front → Left. The same side button stops; the other switches
+the single worker. Setup selects Toggle and F6/F7/F8 while preserving speed and
+regular target preferences. Bedwars requires a selected foreground window with
+the pointer inside. **Small view** offers the same setups. No setup auto-starts.
+See [current setup and verification](docs/BEDWARS-SETUP.md).
 
 **Mouse 4 (Back)** and **Mouse 5 (Forward)** are also available in each **Global shortcuts** dropdown for Activate, Pause and Emergency stop. Select a shortcut and click **Apply shortcuts**. Mouse shortcuts work in Toggle and Hold mode; generated mouse clicks are ignored by the shortcut listener. For Hold, use a different click-output button from the mouse activation shortcut. F6/F7/F8 remain the defaults. See [mouse hotkeys and verification](docs/MOUSE-HOTKEYS.md).
 
