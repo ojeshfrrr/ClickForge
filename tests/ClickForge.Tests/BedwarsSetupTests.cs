@@ -36,6 +36,31 @@ internal static class BedwarsSetupTests
             }
             finally { Directory.Delete(root, true); }
         });
+        test("Selected-window setup never falls back to the ordinary foreground gate", () =>
+        {
+            bool selectedSetup = true; var ordinary = new Gate { CanClick = true }; var selected = new Gate();
+            var gate = new SetupTargetGate(ordinary, selected, () => selectedSetup);
+            Check(!gate.CanClick); selected.CanClick = true; Check(gate.CanClick);
+            selectedSetup = false; ordinary.CanClick = false; Check(!gate.CanClick); selectedSetup = true; Check(gate.CanClick);
+        });
+        test("Bedwars fixed worker pauses on selected target loss and does not send into an ordinary allowed window", () =>
+        {
+            var selected = new Gate(); var input = new Mouse();
+            using var engine = new ClickEngine(input, new SetupTargetGate(new Gate { CanClick = true }, selected, () => true)) { Cps = 50 };
+            engine.Start(); Thread.Sleep(70); Check(input.Outputs.IsEmpty && engine.State == EngineState.Paused);
+            selected.CanClick = true; Until(() => engine.Clicks > 0); selected.CanClick = false; Until(() => engine.State == EngineState.Paused);
+            long count = engine.Clicks; Thread.Sleep(65); Check(engine.Clicks == count); engine.EmergencyStop(); Check(!engine.Enabled && input.Releases > 0);
+        });
+        test("Setup changes release through the same worker and require explicit start", () =>
+        {
+            bool minecraft = true; var input = new Mouse(); var selected = new Gate { CanClick = true };
+            using var engine = new ClickEngine(input, new SetupTargetGate(new Gate { CanClick = true }, selected, () => minecraft)) { Cps = 50 };
+            engine.Button = SideButtonOutputs.OutputFor(5, MouseSetup.MinecraftBedwars); engine.Start(); Until(() => engine.Clicks > 0);
+            engine.Stop(); minecraft = false; engine.Button = SideButtonOutputs.OutputFor(5); long stopped = engine.Clicks;
+            Thread.Sleep(45); Check(!engine.Enabled && stopped == engine.Clicks);
+            engine.Start(); Until(() => engine.Clicks > stopped); engine.Stop();
+            Check(input.Outputs.Contains(ClickButton.Left) && input.Outputs.Contains(ClickButton.Right) && input.MaximumConcurrency == 1 && input.Releases > 0);
+        });
     }
     private sealed class Gate : IVariableTargetGate { public bool CanActivate => CanClick; private volatile bool allowed; public bool CanClick { get => allowed; set => allowed = value; } }
     private sealed class Mouse : IMouseInput
