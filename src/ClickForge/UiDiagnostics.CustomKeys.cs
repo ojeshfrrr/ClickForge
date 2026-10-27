@@ -12,6 +12,7 @@ public partial class MainWindow
         void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);results.Add("PASS "+message);}
         void Route(int id){bool handled=false;WindowMessage(0,0x0312,id,0,ref handled);}
         bool refusedEmergency=false,captured=false,blocked=false;
+        settings = settings with { CustomKey = 0 }; engine.ConfigureOutput(settings.Button, 0); SynchronizeOutputControls();
         _=Dispatcher.BeginInvoke(new Action(()=>
         {
             refusedEmergency=!customKeyWindow!.Capture(settings.StopKey);
@@ -20,7 +21,7 @@ public partial class MainWindow
             RenderDiagnostic(customKeyWindow,Path.Combine(Path.GetDirectoryName(output)!,"ui-custom-key-capture.png"));
             customKeyWindow.DialogResult=true;
         }));
-        ClickButtonInput.SelectedIndex=(int)ClickButton.CustomKey;
+        InputTypeInput.SelectedIndex = (int)OutputInputType.Keyboard;
         Check(refusedEmergency&&captured&&blocked,"Capture dialog rejects emergency-key conflicts and blocks global activation while choosing");
         Check(settings.Button==ClickButton.CustomKey&&settings.CustomKey==69&&engine.CustomKey==69&&!engine.Enabled&&ChangeCustomKeyButton.Visibility==Visibility.Visible,"Custom input key selection configures shared engine while stopped");
         Check(new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!,"ui-test-settings.json")).Load().CustomKey==69,"Captured custom key persists through actual UI");
@@ -28,12 +29,13 @@ public partial class MainWindow
         Check(engine.Enabled&&engine.Session.InputPairsSent>0&&StatusText.Text=="Sending keys","Custom output uses existing activation worker and accurate status with mocked input");
         Route(2);long count=engine.Clicks;await Task.Delay(50);Check(engine.IsPaused&&engine.Clicks==count,"Custom key pause stops new input pairs");
         Route(2);await Task.Delay(70);Route(3);Check(!engine.Enabled&&engine.Clicks>count,"Custom key resume and emergency stop use shared controls");
-        var profile=profiles.Create(settings,"Custom key diagnostic");ClickButtonInput.SelectedIndex=0;ApplyProfile(profile);
-        Check(settings.CustomKey==69&&engine.CustomKey==69&&ClickButtonInput.SelectedIndex==3&&!engine.Enabled,"Applying custom keyboard profile synchronizes output controls without activation");
+        var profile=profiles.Create(settings,"Custom key diagnostic");InputTypeInput.SelectedIndex=0;ApplyProfile(profile);
+        Check(settings.CustomKey==69&&engine.CustomKey==69&&InputTypeInput.SelectedIndex==1&&ClickButtonInput.Visibility==Visibility.Collapsed&&!engine.Enabled,"Applying custom keyboard profile synchronizes output controls without activation");
         RenderDiagnostic(this,Path.Combine(Path.GetDirectoryName(output)!,"ui-custom-key-dashboard.png"));
-        profiles.Delete(profile.Id);settings=settings with{ActiveProfileId=null};ClickButtonInput.SelectedIndex=0;
-        _=Dispatcher.BeginInvoke(new Action(()=>customKeyWindow!.DialogResult=false));ClickButtonInput.SelectedIndex=3;
-        Check(settings.Button==ClickButton.Left&&ClickButtonInput.SelectedIndex==0&&!engine.Enabled,"Cancelling custom capture restores the previous output and leaves input stopped");
+        profiles.Delete(profile.Id);settings=settings with{ActiveProfileId=null};InputTypeInput.SelectedIndex=0;
+        settings = settings with { CustomKey = 0 }; engine.ConfigureOutput(settings.Button, 0); SynchronizeOutputControls();
+        _=Dispatcher.BeginInvoke(new Action(()=>customKeyWindow!.DialogResult=false));InputTypeInput.SelectedIndex=1;
+        Check(settings.Button==ClickButton.Left&&InputTypeInput.SelectedIndex==0&&ClickButtonInput.SelectedIndex==0&&!engine.Enabled,"Cancelling custom capture restores the previous output and leaves input stopped");
         using(var scope=new CustomKeyTestScope(this))
         {
             var test=scope.Window;
@@ -48,7 +50,7 @@ public partial class MainWindow
         Check(settings.ActivateKey==5&&MessageText.Text.Contains("cannot match")&&!engine.Enabled,"Applying shortcuts cannot create a custom-output activation conflict");
         ResetClicked(this,new());
         Check(settings.ActivateKey==5&&settings.PauseKey==6&&settings.CustomKey==0x75&&MessageText.Text.Contains("cannot match"),"Reset shortcut defaults refuses a conflicting custom F6 key without mutating settings");
-        settings=settings with{ActiveProfileId=null};ClickButtonInput.SelectedIndex=0;ResetClicked(this,new());
+        settings=settings with{ActiveProfileId=null};InputTypeInput.SelectedIndex=0;ResetClicked(this,new());
     }
     private sealed class CustomKeyTestScope:IDisposable
     {

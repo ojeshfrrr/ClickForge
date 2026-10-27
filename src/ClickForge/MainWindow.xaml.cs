@@ -44,11 +44,14 @@ public partial class MainWindow : Window
     {
         if (selfTestPath is not null) store = new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(selfTestPath))!, "ui-test-settings.json"));
         else if (previewPath is not null) store = new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(previewPath))!, "preview-settings.json"));
-        settings = store.Load();
+        // Each automated UI run starts from defaults; persistence assertions still
+        // use the disposable store. Interactive tests and normal launches load it.
+        settings = GetArgument("--ui-self-test") is not null ? new() : store.Load();
         if (settings.LayoutVersion < 3) settings = settings with { Width = 1280, Height = 920, LayoutVersion = 3 };
         engine = selfTestPath is null ? new(new MouseInputService(), target, desktopTarget) : new(diagnosticMouse, diagnosticTarget);
         InitializeComponent();
-        foreach (var button in Enum.GetValues<ClickButton>()) ClickButtonInput.Items.Add(ClickButtons.Label(button));
+        InputTypeInput.Items.Add("Mouse"); InputTypeInput.Items.Add("Keyboard");
+        foreach (var button in ClickButtons.MouseChoices) ClickButtonInput.Items.Add(ClickButtons.Label(button));
         InitializeUpdates();
         foreach (var combo in new[] { ActivateInput, PauseInput, StopInput }) foreach (int key in ShortcutKeys.Choices) combo.Items.Add(ShortcutKeys.Label(key));
         LoadControls();
@@ -102,6 +105,7 @@ public partial class MainWindow : Window
         ActivateInput.SelectedItem = ShortcutKeys.Label(settings.ActivateKey);
         PauseInput.SelectedItem = ShortcutKeys.Label(settings.PauseKey);
         StopInput.SelectedItem = ShortcutKeys.Label(settings.StopKey);
+        SideButtonTogglesInput.IsChecked = settings.SideButtonToggles;
         engine.Cps = settings.Cps; target.Restricted = settings.RobloxOnly;
         engine.ConfigureLimits(new(settings.MaximumSessionSeconds, settings.MaximumSessionPairs));
         if (advancedControls is not null) LoadLimitControls();
@@ -115,7 +119,7 @@ public partial class MainWindow : Window
     private void RegisterShortcuts()
     {
         engine.Stop(); shortcutsReady = false;
-        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = "Shortcuts ready. F1–F11 and Mouse 4/5 are supported."; }
+        try { bindings!.Apply(settings); shortcutsReady = true; MessageText.Text = settings.SideButtonToggles ? "Mouse 4 (Back) toggles Left; Mouse 5 (Forward) toggles Right. Both use Toggle mode. F8 emergency stop remains available when configured." : "Shortcuts ready. F1–F11 and Mouse 4/5 are supported."; }
         catch (Exception e) { MessageText.Text = e.Message + " Clicking is disabled until shortcuts are available."; }
         StartKeyText.Text = ShortcutBadge(settings.ActivateKey); StartKeyText.ToolTip = ShortcutKeys.Label(settings.ActivateKey);
         PauseKeyText.Text = ShortcutBadge(settings.PauseKey); PauseKeyText.ToolTip = ShortcutKeys.Label(settings.PauseKey);
@@ -133,6 +137,8 @@ public partial class MainWindow : Window
         {
             if ((int)wParam == 3) { EmergencyClicked(this, new()); }
             else if (activeTest?.IsVisible == true) { handled = true; return 0; }
+            else if (shortcutsReady && settings.SideButtonToggles && (int)wParam is SideButtonOutputs.LeftId or SideButtonOutputs.RightId)
+                ToggleSideButtonOutput((int)wParam);
             else if (shortcutsReady && (int)wParam == 1)
             {
                 if (settings.Mode == ActivationMode.Toggle) ToggleStart();
@@ -227,7 +233,7 @@ public partial class MainWindow : Window
         PauseLabel.Text = engine.IsPaused ? "Resume" : "Pause"; PauseButton.IsEnabled = active;
         PauseButton.ToolTip = active ? "Pause or resume the active request" : "Start clicking before using pause";
         StartButton.ToolTip = !shortcutsReady ? "Apply available, nonconflicting shortcuts to enable clicking" : settings.Mode == ActivationMode.Hold && !active ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to activate. Release it or change focus to stop." : "Start or stop the request. Roblox-only mode waits for a verified foreground client.";
-        ModeHelp.Text = ShortcutKeys.ConflictsWithHoldOutput(settings) ? "Hold activation requires a different click-output button." : settings.Mode == ActivationMode.Hold ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to click. Release or change focus to stop." : $"Press {ShortcutKeys.Label(settings.ActivateKey)} once to start, again to stop.";
+        ModeHelp.Text = ShortcutKeys.ConflictsWithHoldOutput(settings) ? "Hold activation requires a different click-output button." : settings.Mode == ActivationMode.Hold ? $"Hold {ShortcutKeys.Label(settings.ActivateKey)} to click. Release or change focus to stop." : settings.SideButtonToggles ? "Mouse 4 → Left · Mouse 5 → Right. Press again to stop; the other switches." : $"Press {ShortcutKeys.Label(settings.ActivateKey)} once to start, again to stop.";
         RenderVariableStatus(); UpdateDailyStatus();
         if (engine.Error is { } error) MessageText.Text = error;
     }
@@ -235,7 +241,7 @@ public partial class MainWindow : Window
     {
         // State-changing commands still refresh immediately. Idle and background
         // windows wake once a second; visible session metrics update twice a second.
-        bool visibleControls = IsVisible && WindowState != WindowState.Minimized || compactWindow?.IsVisible == true && compactWindow.WindowState != WindowState.Minimized;
+        bool visibleControls = IsVisible && WindowState != WindowState.Minimized || compactWindow?.IsVisible == true && compactWindow.WindowState != WindowState.Minimized || sideButtonWindow?.IsVisible == true && sideButtonWindow.WindowState != WindowState.Minimized;
         var interval = TimeSpan.FromMilliseconds(engine.Enabled && visibleControls ? 500 : 1000);
         if (refresh.Interval != interval) refresh.Interval = interval;
     }
@@ -244,6 +250,7 @@ public partial class MainWindow : Window
         if (selfTestPath is not null) File.AppendAllText(selfTestPath, "WPF closing" + Environment.NewLine);
         if (closing) return;
         if (!exitRequested && previewPath is null && settings.CloseToTray && CanHideToTray) { e.Cancel = true; HideToTray(); return; }
+        sideButtonWindow?.Close();
         closing = true; compactWindow?.Close(); paletteWindow?.Close(); customKeyWindow?.Close(); targetWindow?.Close(); tray?.Dispose(); tray = null; profilesWindow?.Close(); preferencesWindow?.Close(); updateLifetime.Cancel(); updateClient.StatusChanged -= UpdateChanged; updateWindow?.Close(); refresh.Stop(); activeTest?.StopTest(); engine.Dispose(); desktopTarget.Dispose(); target.Dispose(); bindings?.Dispose(); source?.RemoveHook(WindowMessage);
         if (previewPath is null && selfTestPath is null) { settings = settings with { Width = Math.Clamp(Width, 620, 1400), Height = Math.Clamp(Height, 600, 1600), LayoutVersion = 3 }; Persist(); }
     }

@@ -40,7 +40,9 @@ public partial class MainWindow
             Check(DesktopTargetService.RetainedTitle(inspectionFacts, "Old title", () => "Current selected title") == "Current selected title" && SelectedFocusText(inspectionFacts) == "●  In focus", "Owned window metadata and focus remain observable despite other eligibility failures");
             UpdateStatus();
             Check(!engine.Session.HasStarted && SessionElapsedText.Text == "00:00:00" && SessionPairsText.Text == "0" && SessionAverageText.Text == "0.00", "Session dashboard starts at zero without activation");
-            Check(ClickButtonInput.Items.Cast<string>().SequenceEqual(new[] { "Left", "Mouse 4 (Back)", "Mouse 5 (Forward)", "Custom input key…" }) && engine.Button == ClickButton.Left, "Click-button selector exposes Custom input key with Left unchanged by default");
+            Check(InputTypeInput.Items.Cast<string>().SequenceEqual(new[] { "Mouse", "Keyboard" }) && InputTypeInput.SelectedIndex == 0 &&
+                ClickButtonInput.Items.Cast<string>().SequenceEqual(new[] { "Left", "Mouse 4 (Back)", "Mouse 5 (Forward)", "Right" }) && engine.Button == ClickButton.Left,
+                "Separate input type and mouse-button selectors retain Mouse Left as default");
             Hotkey(1); await Task.Delay(40); ClickButtonInput.SelectedIndex = 1;
             Check(!engine.Enabled && engine.Button == ClickButton.Mouse4 && settings.Button == ClickButton.Mouse4, "Changing click button stops the shared engine without automatic restart");
             ClickButtonInput.SelectedIndex = 2;
@@ -175,7 +177,7 @@ public partial class MainWindow
             }
             CpsInput.Focus(); await Task.Delay(30);
             RenderDiagnostic(this, Path.Combine(Path.GetDirectoryName(output)!, "ui-focus.png"));
-            ShortcutsExpander.IsExpanded = true; UpdateLayout();
+            ShortcutsExpander.IsExpanded = true; UpdateLayout(); ActivateInput.BringIntoView(); ActivateInput.Focus(); await Task.Delay(100);
             ActivateInput.IsDropDownOpen = true; await Task.Delay(70); ActivateInput.ApplyTemplate();
             var popup = (System.Windows.Controls.Primitives.Popup)ActivateInput.Template.FindName("PART_Popup", ActivateInput);
             Check(popup.IsOpen && popup.Child is FrameworkElement, "Dark shortcut popup opens");

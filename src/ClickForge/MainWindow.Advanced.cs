@@ -188,6 +188,7 @@ public partial class MainWindow
     }
     private void UpdateAdvancedStatus()
     {
+        RefreshSideButtonControls();
         var session = engine.Session;
         var active = engine.ActiveSessionLimits;
         string progress = active.Seconds is { } seconds ? $"{Math.Max(0, seconds - session.Elapsed.TotalSeconds):0.0}s remaining" : "";

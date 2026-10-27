@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation;
 using ClickForge.Core;
 
 namespace ClickForge;
@@ -9,6 +10,7 @@ public partial class MainWindow
     private readonly DesktopTargetService desktopTarget = new();
     private bool synchronizingVariable;
     private bool synchronizingOutput;
+    private ClickButton lastMouseButton = ClickButton.Left;
     private CustomKeyWindow? customKeyWindow;
     private void LoadTimingControls()
     {
@@ -21,18 +23,52 @@ public partial class MainWindow
     }
     private void ClickButtonChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!ready || synchronizingOutput || ClickButtonInput.SelectedIndex < 0) return;
+        if (!ready || synchronizingOutput || InputTypeInput.SelectedIndex != 0 || ClickButtonInput.SelectedIndex < 0 || ClickButtonInput.SelectedIndex >= ClickButtons.MouseChoices.Count) return;
         engine.Stop(); activeTest?.StopTest();
-        var button = (ClickButton)ClickButtonInput.SelectedIndex;
-        if(button==ClickButton.CustomKey){ChooseCustomKey();return;}
+        var button = ClickButtons.MouseChoices[ClickButtonInput.SelectedIndex];
         ClickButtons.Validate(button); engine.ConfigureOutput(button,settings.CustomKey); settings = settings with { Button = button };
         SynchronizeOutputControls(); Persist(); lastDisplay = null; UpdateStatus(); MessageText.Text = ClickButtons.Label(button) + " selected. Clicking remains stopped.";
     }
     private void SynchronizeOutputControls()
     {
-        synchronizingOutput=true;
-        try { ClickButtonInput.SelectedIndex=(int)settings.Button; ChangeCustomKeyButton.Visibility=settings.Button==ClickButton.CustomKey?Visibility.Visible:Visibility.Collapsed;ChangeCustomKeyButton.Content="Change: "+KeyboardOutput.Label(settings.CustomKey);ClickButtonInput.ToolTip=ClickButtons.OutputLabel(settings.Button,settings.CustomKey);OutputRateHelp.Text=settings.Button==ClickButton.CustomKey?"Set how many key presses to send per second.":"Set how many clicks to send per second."; }
-        finally{synchronizingOutput=false;}
+        synchronizingOutput = true;
+        try
+        {
+            bool keyboard = OutputSelection.TypeOf(settings.Button) == OutputInputType.Keyboard;
+            if (!keyboard) lastMouseButton = settings.Button;
+            InputTypeInput.SelectedIndex = keyboard ? 1 : 0;
+            ClickButtonInput.SelectedItem = ClickButtons.Label(lastMouseButton);
+            ClickButtonInput.Visibility = keyboard ? Visibility.Collapsed : Visibility.Visible;
+            ChangeCustomKeyButton.Visibility = keyboard ? Visibility.Visible : Visibility.Collapsed;
+            ChangeCustomKeyButton.Content = "Key: " + KeyboardOutput.Label(settings.CustomKey) + " · Change";
+            AutomationProperties.SetName(ChangeCustomKeyButton, "Keyboard output " + KeyboardOutput.Label(settings.CustomKey) + ". Capture or change output key.");
+            ChangeCustomKeyButton.ToolTip = "Capture one supported keyboard output key. This is separate from activation, pause and emergency shortcuts.";
+            ClickButtonInput.ToolTip = "Mouse output: " + ClickButtons.Label(lastMouseButton) + ". Changing output stops input.";
+            OutputRateHelp.Text = (keyboard ? "Keyboard output: " : "Mouse output: ") + ClickButtons.OutputLabel(settings.Button, settings.CustomKey) +
+                (keyboard ? " · Key presses per second." : " · Click pairs per second.");
+        }
+        finally { synchronizingOutput = false; }
+    }
+    private void InputTypeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ready || synchronizingOutput || InputTypeInput.SelectedIndex is < 0 or > 1) return;
+        engine.Stop(); activeTest?.StopTest();
+        var type = (OutputInputType)InputTypeInput.SelectedIndex;
+        if (type == OutputInputType.Keyboard)
+        {
+            // A retained key must still pass current hotkey-conflict validation.
+            // If it cannot, capture a supported key instead of substituting one.
+            try { _ = OutputSelection.ChangeType(settings, type); }
+            catch (ArgumentException) { ChooseCustomKey(); return; }
+        }
+        try
+        {
+            var next = OutputSelection.ChangeType(settings, type, lastMouseButton);
+            engine.ConfigureOutput(next.Button, next.CustomKey); settings = next;
+            SynchronizeOutputControls(); Persist(); lastDisplay = null; UpdateStatus();
+            MessageText.Text = "Output: " + (type == OutputInputType.Keyboard ? "Keyboard · " : "Mouse · ") + ClickButtons.OutputLabel(settings.Button, settings.CustomKey) + ". Input remains stopped. Global shortcuts are unchanged.";
+        }
+        catch (ArgumentException error) { SynchronizeOutputControls(); MessageText.Text = error.Message; UpdateStatus(); }
     }
     private void ChangeCustomKeyClicked(object sender,RoutedEventArgs e)=>ChooseCustomKey();
     private void ChooseCustomKey()
