@@ -253,6 +253,7 @@ public partial class MainWindow
             await RunAdvancedDiagnosticsAsync(results, output);
             await RunOutputSelectionDiagnosticsAsync(results, output);
             await RunSideButtonOutputDiagnosticsAsync(results, output);
+            await RunSimpleMouseControlsDiagnosticsAsync(results, output);
             Width = 1280; Height = 920;
             await Task.Delay(1500); // Exclude resize, popup and software-render warmup.
             using var process = System.Diagnostics.Process.GetCurrentProcess();
