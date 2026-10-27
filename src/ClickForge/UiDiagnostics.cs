@@ -237,8 +237,10 @@ public partial class MainWindow
             }
             finally { activeTest.Close(); activeTest = null; ToggleModeInput.IsChecked = true; SafeTestModeInput.SelectedIndex = 0; }
             Check(!engine.Enabled, "UI checks finish stopped");
-            UpdatesClicked(this, new());
+            engine.Start(); UpdatesClicked(this, new());
             Check(updateWindow is { IsVisible: true } && VersionLabel.Text == "v" + InstalledVersion.Value.Split('+')[0], "Updates window opens with assembly-derived version");
+            Check(!engine.Enabled && !StartButton.IsEnabled, "Opening Updates stops and releases input and disables the dashboard start action");
+            ToggleStart(); Check(!engine.Enabled && MessageText.Text.Contains("Close Updates"), "Global activation cannot restart input while reviewing an update");
             var updatePanel = (StackPanel)((ScrollViewer)updateWindow!.Content).Content;
             var autoCheck = updatePanel.Children.OfType<CheckBox>().Single();
             autoCheck.IsChecked = true; Check(settings.CheckForUpdatesOnStartup && !engine.Enabled, "Startup update preference persists without activation");
@@ -247,9 +249,11 @@ public partial class MainWindow
             {
                 updateClient.Report(state, "Diagnostic update status"); await Task.Delay(15);
                 Check(updateWindow.DisplayedStatus.Contains("Diagnostic update status"), "Updater displays " + state);
+                if (state == ClickForge.Core.Updates.UpdateState.ReadyToInstall) Check(!updateWindow.CanInstall, "Updater cannot enable Install from a status without a verified staged package");
             }
             RenderDiagnostic(updateWindow, Path.Combine(Path.GetDirectoryName(output)!, "ui-updates.png"));
             updateWindow.Close(); updateClient.Report(ClickForge.Core.Updates.UpdateState.Idle, "Check for a newer stable release.");
+            Check(!engine.Enabled && StartButton.IsEnabled, "Closing Updates restores available controls without restarting input");
             Width = 1280; Height = 920;
             await RunDailyDiagnosticsAsync(results, output);
             await RunLightweightDiagnosticsAsync(results);
