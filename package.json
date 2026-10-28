@@ -1,0 +1,14 @@
+{
+  "name": "clickforge-downloads",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node hosting/server.js",
+    "test": "node --test hosting/server.test.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.900.0"
+  },
+  "engines": { "node": ">=20" }
+}

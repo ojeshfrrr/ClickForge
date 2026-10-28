@@ -19,6 +19,7 @@ coverage/
 .env
 .env.*
 !.env.example
+/node_modules/
 settings.json
 ui-test-settings.json
 *.pfx
