@@ -100,6 +100,24 @@ footer{flex-direction:column}
 .btn{transition:none}
 }
 
+
+/* ClickForge refresh: editorial type, violet hardware-inspired surfaces. */
+body{background:#f3f0eb;color:#211d35;font-family:'Space Grotesk',system-ui,sans-serif}
+header{height:90px}.brand{font-size:23px}.brand-mark{background:#483399;color:#fff;border-radius:9px}
+nav{gap:28px}.nav-download{background:#261b46;color:#fff;border-radius:6px;padding:13px 20px}
+.hero{background:#281d46;color:#fff;position:relative}.hero-inner{min-height:650px;grid-template-columns:1fr 1fr;gap:64px;padding-top:90px;padding-bottom:105px}
+.label{color:#e0c5e8;text-transform:none;letter-spacing:0;font-size:14px}.label:before{background:#ffb18e}
+.hero h1{font-size:clamp(65px,8vw,116px);line-height:.92;letter-spacing:-.07em;margin:28px 0}.hero p{color:#e0d7ea;font-size:18px;line-height:1.6}
+.actions{gap:12px;margin-top:34px}.btn{border-radius:6px;min-height:56px;border-color:#a897bc;color:white}.btn-main{background:#ffbd9e;border-color:#ffbd9e;color:#291b35}.btn-main:hover{background:#ffd4bd}.btn:not(.btn-main):hover{background:#ffffff16}
+.meta,.screen-label{color:#d6c9df}.hero-art:before{content:'CF';font-size:clamp(180px,25vw,380px);letter-spacing:-.1em;right:-50px;top:-70px;color:#ffffff0d}.hero-art:after{border-color:#ffbd9e38;inset:-8% -30% -8% 15%}
+.screen{width:110%;border:6px solid #4d3b68;box-shadow:20px 24px 0 #1b1331;border-radius:12px}.screen img{border-radius:5px}.screen-label{bottom:-40px}
+.ticker{background:#e5dcec;border:0}.ticker-inner{min-height:80px;color:#342449}.ticker svg{color:#6c4ca8}
+.intro{padding:120px 0 86px}.intro h2{font-size:clamp(50px,6vw,86px);letter-spacing:-.075em}.intro-right p,.feature p{color:#5c5369}.feature-list{border-color:#bdb2c7}.feature{padding:35px 0;border-color:#d1c8d7}.feature h3{font-size:26px}.feature .icon{border-color:#a68eb9;color:#694b96}
+.end{background:#dcd0e8;border-radius:12px;padding:72px;margin-top:100px}.end p{color:#5b5165}.end .btn-main{background:#30204d;border-color:#30204d;color:#fff}.end .btn-main:hover{background:#4e3477}footer{color:#61576a}
+a:focus-visible{outline-color:#df794d}
+@media(max-width:900px){.hero-inner{grid-template-columns:1fr;gap:55px;padding:72px 0 90px}.hero-art{max-width:680px}.screen{width:100%}.hero-art:before{font-size:200px;top:-60px}.intro{padding:80px 0 55px}.end{padding:42px}}
+@media(max-width:520px){header{height:72px}.hero-inner{padding:55px 0 85px}.hero h1{font-size:clamp(52px,13vw,68px)}.screen{box-shadow:10px 12px 0 #1b1331}.hero-art:before{font-size:125px;top:-45px}.intro{padding:65px 0 40px}.end{padding:30px}.ticker-inner{gap:16px}.feature h3{font-size:21px}}
+
 </style></head><body>
 <header class="wrap"><a href="/" class="brand"><span class="brand-mark" aria-hidden="true"><i data-lucide="mouse-pointer-2">↗</i></span>ClickForge</a><nav aria-label="Main navigation"><a class="features-link" href="#features">Features</a><a href="https://github.com/ojeshfrrr/ClickForge">Source</a><a class="nav-download" href="#download">Get ClickForge</a></nav></header>
 <main><section class="hero" id="download"><div class="wrap hero-inner"><div class="hero-copy"><div class="label">A Windows desktop utility</div><h1>Clicks,<br>under your<br>control.</h1><p>Set a speed, choose a button, and get on with it. ClickForge puts the controls right where you need them.</p><div class="actions"><a class="btn btn-main" href="${installer}"><i data-lucide="download" aria-hidden="true">↓</i>Download for Windows</a><a class="btn" href="${portable}">Portable version</a></div><div class="meta">${source}</div></div><div class="hero-art"><div class="screen"><img src="/preview.png" width="1000" height="880" alt="The ClickForge app showing its Minecraft Bedwars button setup"><div class="screen-label">The real ClickForge app, shown in its Bedwars setup.</div></div></div></div></section>
