@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = 'artifacts/package', [switch]$Strict)
+param([string]$OutputDirectory = 'artifacts/package', [switch]$Strict, [switch]$UncompressedSingleFile)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path $PSScriptRoot -Parent)
 $repoRoot = (Get-Location).Path
@@ -13,7 +13,8 @@ if ($Strict) {
 $output = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutputDirectory))
 New-Item -ItemType Directory -Force $output | Out-Null
 foreach ($project in @('src/ClickForge/ClickForge.csproj','src/ClickForge.Updater/ClickForge.Updater.csproj')) {
-    dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o $output
+    $compression = if ($UncompressedSingleFile) { 'false' } else { 'true' }
+    dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true "-p:EnableCompressionInSingleFile=$compression" -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o $output
     if ($LASTEXITCODE) { throw "Publish failed: $project" }
 }
 foreach ($exe in @('ClickForge.exe','ClickForge.Updater.exe')) {
