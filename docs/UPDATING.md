@@ -13,6 +13,12 @@ assembly release version rather than a fixed historic updater version. The
 official public feed, allowed download hosts, strict payload/manifest checks,
 checksums, independent helper, startup acknowledgement and rollback are unchanged.
 The installer and ZIP are still built and verified by the tagged release workflow.
+
+Release builds compress the bundled executables while retaining the self-contained
+runtime. This makes the installed executables smaller, but may slow startup and can
+make the Inno Setup installer larger because its payload is already compressed.
+For comparisons, `scripts/Package-Release.ps1 -UncompressedSingleFile` produces an
+uncompressed bundle; compare both distribution sizes before changing the default.
 Existing updater-enabled versions use the same public channel without an account.
 
 Settings, profiles and the Bedwars `MouseSetup` preference are retained by both
